@@ -90,6 +90,7 @@ const showUserMenu = ref(false)
 
 const navItems = [
   { path: '/dashboard', icon: '◈', label: 'Resumen' },
+  { path: '/musica', icon: '♫', label: 'Música' },
   { path: '/repeated', icon: '↻', label: 'Repetidas' },
   { path: '/playlists', icon: '☷', label: 'Playlists' }
 ]

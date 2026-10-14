@@ -6,6 +6,7 @@ import RegisterView from '@/views/RegisterView.vue'
 import DashboardLayout from '@/layouts/DashboardLayout.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import RepeatedView from '@/views/RepeatedView.vue'
+import MusicaView from '@/views/MusicaView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
 import { useAuth } from '@/services/auth'
 
@@ -45,6 +46,12 @@ const routes = [
         name: 'dashboard',
         component: DashboardView,
         meta: { title: 'Tu resumen', requiresAuth: true }
+      },
+      {
+        path: '/musica',
+        name: 'musica',
+        component: MusicaView,
+        meta: { title: 'Gestor de Música', requiresAuth: true }
       },
       {
         path: '/repeated',
