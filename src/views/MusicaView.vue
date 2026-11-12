@@ -49,7 +49,7 @@
           :class="{ active: plataformaActiva === plat.id }"
           @click="cambiarPlataformaExtractor(plat.id)"
         >
-          <span class="plat-dot" :style="{ backgroundColor: plat.color }"></span>
+          <AppIcon :name="plat.id" :size="18" />
           <span>{{ plat.nombre }}</span>
         </button>
       </div>
@@ -118,8 +118,12 @@
                 <AppIcon name="music" :size="18" />
               </div>
               <div class="api-track-info">
-                <strong>{{ item.titulo }}</strong>
-                <small>{{ item.artista }} • {{ item.album }}</small>
+                <div class="api-track-title-wrap">
+                  <MarqueeText :text="item.titulo" class="api-track-title" />
+                </div>
+                <div class="api-track-artist-wrap">
+                  <MarqueeText :text="item.artista + (item.album ? ' • ' + item.album : '')" class="api-track-artist" />
+                </div>
                 <div class="api-track-badges">
                   <span :class="['origin-badge', `origin-${item.plataforma_origen || plataformaActiva}`]">
                     {{ etiquetaPlataforma(item.plataforma_origen || plataformaActiva) }}
@@ -140,8 +144,8 @@
                 <button
                   type="button"
                   class="icon-add-btn"
-                  title="Agregar canción (+)"
-                  @click="extraerCancionIndividual(item)"
+                  title="Agregar canción a una playlist (+)"
+                  @click="abrirModalAgregar(item)"
                 >
                   <AppIcon name="plus" :size="16" />
                 </button>
@@ -179,8 +183,8 @@
                   </button>
                   <button
                     class="icon-add-btn"
-                    title="Agregar canción (+)"
-                    @click="extraerCancionIndividual(tr)"
+                    title="Agregar canción a una playlist (+)"
+                    @click="abrirModalAgregar(tr)"
                   >
                     <AppIcon name="plus" :size="15" />
                   </button>
@@ -405,6 +409,14 @@
         </div>
       </div>
     </div>
+
+    <!-- MODAL PARA AGREGAR A PLAYLIST CON SELECTOR DE LISTAS O CREAR UNA NUEVA -->
+    <AddToPlaylistModal
+      :is-open="mostrarModalAgregar"
+      :track="trackParaAgregar"
+      @close="mostrarModalAgregar = false"
+      @song-added="onCancionAgregada"
+    />
   </div>
 </template>
 
@@ -412,6 +424,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import CustomSelect from '@/components/CustomSelect.vue'
+import AddToPlaylistModal from '@/components/AddToPlaylistModal.vue'
+import MarqueeText from '@/components/MarqueeText.vue'
 import { useAuth } from '@/services/auth'
 import { dbService } from '@/services/db'
 import { musicApiService } from '@/services/musicApis'
@@ -426,6 +440,20 @@ const playlistsOrg = ref([])
 const cargando = ref(false)
 const mensaje = ref('')
 const errorMensaje = ref('')
+
+// Modal Agregar a Playlist
+const mostrarModalAgregar = ref(false)
+const trackParaAgregar = ref(null)
+
+function abrirModalAgregar(track) {
+  trackParaAgregar.value = track
+  mostrarModalAgregar.value = true
+}
+
+function onCancionAgregada({ track, playlist }) {
+  mensaje.value = `✓ "${track.titulo}" guardada en "${playlist.nombre}" y sincronizada en la base de datos.`
+  cargarCanciones()
+}
 
 // Filtros, Búsqueda y Ordenamiento
 const filtroBusqueda = ref('')
@@ -1148,23 +1176,28 @@ onMounted(() => {
 .api-track-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.api-track-info strong {
+.api-track-title-wrap,
+.api-track-artist-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.api-track-title {
   display: block;
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 700;
+  color: #ffffff;
 }
 
-.api-track-info small {
+.api-track-artist {
   display: block;
   font-size: 11px;
   color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .api-track-badges {

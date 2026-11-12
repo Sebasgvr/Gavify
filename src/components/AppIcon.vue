@@ -39,6 +39,27 @@
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </template>
 
+    <!-- Spotify Brand Icon -->
+    <template v-else-if="name === 'spotify'">
+      <circle cx="12" cy="12" r="11" fill="#1DB954" stroke="none" />
+      <path d="M7 9.2c3.5-1 7.2-.8 10.3.9" stroke="#121212" stroke-width="2" stroke-linecap="round" fill="none" />
+      <path d="M7.7 12.3c2.9-.8 6.1-.6 8.7.8" stroke="#121212" stroke-width="1.7" stroke-linecap="round" fill="none" />
+      <path d="M8.5 15.2c2.3-.6 4.9-.5 7 .5" stroke="#121212" stroke-width="1.4" stroke-linecap="round" fill="none" />
+    </template>
+
+    <!-- YouTube Brand Icon -->
+    <template v-else-if="name === 'youtube'">
+      <rect x="2" y="5" width="20" height="14" rx="4.5" fill="#FF0000" stroke="none" />
+      <polygon points="10 8.5 16 12 10 15.5" fill="#FFFFFF" stroke="none" />
+    </template>
+
+    <!-- YouTube Music Brand Icon -->
+    <template v-else-if="name === 'youtube_music' || name === 'youtube-music' || name === 'ytmusic'">
+      <circle cx="12" cy="12" r="11" fill="#FF0000" stroke="none" />
+      <circle cx="12" cy="6" r="6" stroke="#FFFFFF" stroke-width="1.6" fill="none" transform="translate(0, 6)" />
+      <polygon points="10.5 8.8 15 12 10.5 15.2" fill="#FFFFFF" stroke="none" />
+    </template>
+
     <!-- Plus -->
     <template v-else-if="name === 'plus'">
       <line x1="12" y1="5" x2="12" y2="19" />

@@ -337,14 +337,19 @@
                 <div v-else class="rep-thumb rep-thumb-empty">
                   <AppIcon name="music" :size="16" />
                 </div>
-                <div>
-                  <strong>{{ cancion.titulo }}</strong>
-                  <small>
-                    {{ cancion.artista }} • {{ etiquetaPlataforma(cancion.plataforma_origen) }}
-                    <span v-if="estaEnPlaylistActual(cancion)" class="already-in-tag">
-                      • Ya está en esta lista
-                    </span>
-                  </small>
+                <div class="picker-track-text-wrap">
+                  <div class="picker-track-title-wrap">
+                    <MarqueeText :text="cancion.titulo" class="picker-track-title" />
+                  </div>
+                  <div class="picker-track-artist-wrap">
+                    <MarqueeText :text="cancion.artista" class="picker-track-artist" />
+                    <small class="picker-track-sub">
+                      • {{ etiquetaPlataforma(cancion.plataforma_origen) }}
+                      <span v-if="estaEnPlaylistActual(cancion)" class="already-in-tag">
+                        • Ya está en esta lista
+                      </span>
+                    </small>
+                  </div>
                 </div>
               </div>
               <div class="picker-actions">
@@ -402,14 +407,19 @@
                 <div v-else class="rep-thumb rep-thumb-empty">
                   <AppIcon name="music" :size="16" />
                 </div>
-                <div>
-                  <strong>{{ track.titulo }}</strong>
-                  <small>
-                    {{ track.artista }} • {{ etiquetaPlataforma(track.plataforma_origen || plataformaApiPlaylist) }} • {{ formatearDuracion(track.duracion_segundos) }}
-                    <span v-if="estaEnPlaylistActual(track)" class="already-in-tag">
-                      • Ya está en esta lista
-                    </span>
-                  </small>
+                <div class="picker-track-text-wrap">
+                  <div class="picker-track-title-wrap">
+                    <MarqueeText :text="track.titulo" class="picker-track-title" />
+                  </div>
+                  <div class="picker-track-artist-wrap">
+                    <MarqueeText :text="track.artista" class="picker-track-artist" />
+                    <small class="picker-track-sub">
+                      • {{ etiquetaPlataforma(track.plataforma_origen || plataformaApiPlaylist) }} • {{ formatearDuracion(track.duracion_segundos) }}
+                      <span v-if="estaEnPlaylistActual(track)" class="already-in-tag">
+                        • Ya está en esta lista
+                      </span>
+                    </small>
+                  </div>
                 </div>
               </div>
               <div class="picker-actions">
@@ -497,7 +507,9 @@
 
                   <div class="track-title-stack">
                     <div class="track-name-line">
-                      <strong class="track-name">{{ item.canciones?.titulo }}</strong>
+                      <div class="track-name-marquee-wrap">
+                        <MarqueeText :text="item.canciones?.titulo" class="track-name" />
+                      </div>
                       <span
                         v-if="item.repetida_en_misma_lista"
                         class="inline-dup-pill same-list"
@@ -513,7 +525,9 @@
                       <span class="platform-mini-tag">
                         {{ etiquetaPlataforma(item.canciones?.plataforma_origen) }}
                       </span>
-                      <span class="artist-sub">{{ item.canciones?.artista }}</span>
+                      <div class="track-artist-marquee-wrap">
+                        <MarqueeText :text="item.canciones?.artista" class="artist-sub" />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -606,7 +620,7 @@
             @click="abrirModalImportarApi"
           >
             <AppIcon name="bolt" :size="15" />
-            <span>Importar de Spotify / YT Music</span>
+            <span>Extraer de mis cuentas</span>
           </button>
 
           <button
@@ -689,14 +703,14 @@
     </div>
 
     <!-- =================================================================== -->
-    <!-- MODAL: IMPORTAR PLAYLIST DESDE SPOTIFY / YOUTUBE MUSIC / YOUTUBE    -->
+    <!-- MODAL: EXTRAER PLAYLISTS DESDE CUENTAS (SPOTIFY / YOUTUBE MUSIC / YT)-->
     <!-- =================================================================== -->
     <div v-if="mostrarModalApi" class="modal-backdrop" @click.self="mostrarModalApi = false">
       <div class="modal-card modal-large panel">
         <div class="panel-head">
           <div>
             <span class="tiny accent">EXTRACCIÓN AUTOMÁTICA DE LISTAS</span>
-            <h3>Importar Playlists de Spotify, YouTube Music y YouTube</h3>
+            <h3>Extraer Playlists de tus Cuentas Vinculadas</h3>
           </div>
           <button class="outline btn-sm" @click="mostrarModalApi = false">
             <AppIcon name="close" :size="14" />
@@ -706,14 +720,17 @@
         <div class="import-grid">
           <div v-for="pl in playlistsExternasDisponibles" :key="pl.externalId" class="import-card">
             <div>
-              <span class="tiny accent">{{ pl.plataforma_origen.toUpperCase() }}</span>
+              <div class="flex items-center gap-2 mb-1" style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+                <AppIcon :name="pl.plataforma_origen" :size="16" />
+                <span class="tiny accent font-bold">{{ pl.plataforma_origen === 'youtube_music' ? 'YT MUSIC' : pl.plataforma_origen.toUpperCase() }}</span>
+              </div>
               <h4>{{ pl.nombre }}</h4>
               <p>{{ pl.descripcion }}</p>
               <small>{{ pl.canciones.length }} canciones listas para sincronizar</small>
             </div>
-            <button class="primary btn-sm" @click="importarPlaylistExterna(pl)">
+            <button class="primary btn-sm btn-icon-flex" @click="importarPlaylistExterna(pl)">
               <AppIcon name="bolt" :size="14" />
-              <span>Importar ahora</span>
+              <span>Extraer ahora</span>
             </button>
           </div>
         </div>
@@ -824,6 +841,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import CustomSelect from '@/components/CustomSelect.vue'
+import MarqueeText from '@/components/MarqueeText.vue'
 import { useAuth } from '@/services/auth'
 import { dbService } from '@/services/db'
 import { CATALOGOS_SINCRONIZADOS, musicApiService } from '@/services/musicApis'
@@ -2240,19 +2258,46 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1;
 }
 
-.picker-left strong {
-  display: block;
+.picker-track-text-wrap {
+  min-width: 0;
+  max-width: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.picker-track-title-wrap,
+.picker-track-artist-wrap {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.picker-track-title {
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 700;
+  color: #ffffff;
 }
 
-.picker-left small {
+.picker-track-artist {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.picker-track-sub {
   color: var(--muted);
   font-size: 11px;
+}
+
+.track-name-marquee-wrap {
+  min-width: 0;
+  max-width: 320px;
+}
+
+.track-artist-marquee-wrap {
+  min-width: 0;
+  max-width: 240px;
 }
 
 .picker-actions {

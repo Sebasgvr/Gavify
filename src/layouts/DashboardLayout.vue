@@ -42,7 +42,7 @@
           :class="{ active: route.path === '/connect' }"
         >
           <span class="nav-icon"><AppIcon name="link" :size="18" /></span>
-          <span class="nav-text">Conectar APIs</span>
+          <span class="nav-text">Conectar Cuentas</span>
         </RouterLink>
 
         <RouterLink
@@ -74,8 +74,23 @@
         </div>
 
         <div class="recent-list">
+          <!-- Pinned: Tus me gusta (Favoritos estilo Spotify) -->
           <button
-            v-for="pl in recentPlaylists"
+            class="recent-pl-item fav-pinned-item"
+            :class="{ active: route.path === '/playlists' && playlistFavoritos && route.query.id === playlistFavoritos.id }"
+            @click="abrirFavoritos"
+          >
+            <div class="recent-pl-thumb fav-heart-thumb">
+              <AppIcon name="heart-filled" :size="15" />
+            </div>
+            <div class="recent-pl-meta">
+              <strong class="pl-name">Tus me gusta</strong>
+              <span class="pl-creator">Playlist • {{ totalFavoritos }} {{ totalFavoritos === 1 ? 'canción' : 'canciones' }}</span>
+            </div>
+          </button>
+
+          <button
+            v-for="pl in recentPlaylistsFiltradas"
             :key="pl.id"
             class="recent-pl-item"
             :class="{ active: route.path === '/playlists' && route.query.id === pl.id }"
@@ -223,9 +238,20 @@ const player = usePlayer()
 
 const showUserMenu = ref(false)
 const recentPlaylists = ref([])
+const playlistFavoritos = ref(null)
+const totalFavoritos = ref(0)
+
+const recentPlaylistsFiltradas = computed(() => {
+  return recentPlaylists.value.filter(
+    p => p.nombre?.toLowerCase() !== 'tus me gusta' && p.tipo !== 'favoritos'
+  )
+})
 
 const pageTitle = computed(() => {
   if (route.path === '/playlists' && route.query.id) {
+    if (playlistFavoritos.value && route.query.id === playlistFavoritos.value.id) {
+      return 'Tus me gusta'
+    }
     const found = recentPlaylists.value.find(p => p.id === route.query.id)
     return found ? found.nombre : 'Playlist'
   }
@@ -235,8 +261,19 @@ const pageTitle = computed(() => {
 async function cargarPlaylistsRecientes() {
   try {
     recentPlaylists.value = await dbService.getRecentPlaylists()
+    const fav = await dbService.getOrCreateFavoritosPlaylist()
+    playlistFavoritos.value = fav
+    const favCanciones = await dbService.getCancionesByPlaylist(fav.id)
+    totalFavoritos.value = favCanciones.length
   } catch (e) {
     console.warn('Error cargando playlists recientes:', e)
+  }
+}
+
+function abrirFavoritos() {
+  if (playlistFavoritos.value) {
+    dbService.markPlaylistUsed(playlistFavoritos.value.id)
+    router.push({ path: '/playlists', query: { id: playlistFavoritos.value.id } })
   }
 }
 
@@ -448,6 +485,19 @@ onMounted(() => {
   overflow: hidden;
   flex-shrink: 0;
   background: #1b211b;
+}
+
+.fav-heart-thumb {
+  background: linear-gradient(135deg, #450af5, #8e8ee5) !important;
+  color: #ffffff !important;
+  display: grid;
+  place-items: center;
+}
+
+.fav-pinned-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 4px;
+  padding-bottom: 8px;
 }
 
 .thumb-single {

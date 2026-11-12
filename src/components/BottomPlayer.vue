@@ -92,13 +92,15 @@
           </div>
 
           <div class="player-track-meta">
-            <strong class="player-track-title">{{ player.currentTrack.value.titulo }}</strong>
-            <span class="player-track-artist">
-              {{ player.currentTrack.value.artista }}
+            <div class="player-track-title-wrap">
+              <MarqueeText :text="player.currentTrack.value.titulo" class="player-track-title" />
+            </div>
+            <div class="player-track-artist-wrap">
+              <MarqueeText :text="player.currentTrack.value.artista" class="player-track-artist" />
               <span class="player-origin-tag">
                 {{ etiquetaPlataforma(player.currentTrack.value.plataforma_origen) }}
               </span>
-            </span>
+            </div>
           </div>
 
           <div class="player-quick-actions">
@@ -243,8 +245,9 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import MarqueeText from '@/components/MarqueeText.vue'
 import { usePlayer } from '@/services/player'
 import { dbService } from '@/services/db'
 import { useAuth } from '@/services/auth'
@@ -288,14 +291,29 @@ function onVolumeInput(event) {
 async function guardarCancionActual() {
   const track = player.currentTrack.value
   if (!track) return
-  player.toggleSaveTrack(track, async savedTrack => {
-    try {
-      await dbService.ensureSongSavedInDatabase(savedTrack)
-    } catch (e) {
-      console.warn('Could not persist track on save:', e)
-    }
-  })
+  try {
+    const res = await dbService.toggleCancionFavorita(track)
+    player.isCurrentSaved.value = res.isLiked
+    player.saveFeedback.value = res.isLiked
+      ? 'Guardada en Tus me gusta'
+      : 'Quitada de Tus me gusta'
+    setTimeout(() => {
+      player.saveFeedback.value = ''
+    }, 2400)
+  } catch (e) {
+    console.warn('Error en toggle favoritos:', e)
+  }
 }
+
+watch(
+  () => player.currentTrack.value?.id,
+  async (newId) => {
+    if (newId) {
+      player.isCurrentSaved.value = await dbService.isCancionFavorita(newId)
+    }
+  },
+  { immediate: true }
+)
 
 function formatearTiempo(segundos) {
   const s = Math.max(0, Math.floor(Number(segundos) || 0))
@@ -548,26 +566,28 @@ function etiquetaPlataforma(plat) {
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  max-width: 220px;
+}
+
+.player-track-title-wrap,
+.player-track-artist-wrap {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .player-track-title {
   font-size: 14px;
   font-weight: 700;
   color: #ffffff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .player-track-artist {
   font-size: 12px;
   color: #9da49c;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .player-origin-tag {

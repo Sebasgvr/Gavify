@@ -35,7 +35,7 @@ const routes = [
     path: '/connect',
     name: 'connect',
     component: ConnectView,
-    meta: { requiresAuth: true, title: 'Conectar APIs Musicales' }
+    meta: { requiresAuth: true, title: 'Conectar Cuentas de Streaming' }
   },
   {
     path: '/dashboard',

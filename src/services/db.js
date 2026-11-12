@@ -536,31 +536,157 @@ export const dbService = {
   },
 
   async persistSongToSupabase(cancionObj) {
+    if (!supabase) return
     try {
-      await supabase.from('canciones').upsert({
+      const payload = {
         id: cancionObj.id,
         usuario_id: cancionObj.usuario_id,
         organizacion_id: cancionObj.organizacion_id,
         titulo: cancionObj.titulo,
         artista: cancionObj.artista,
-        album: cancionObj.album,
-        genero: cancionObj.genero,
-        duracion_segundos: cancionObj.duracion_segundos,
-        reproducciones: cancionObj.reproducciones,
+        album: cancionObj.album || null,
+        genero: cancionObj.genero || 'Pop',
+        duracion_segundos: Number(cancionObj.duracion_segundos) || 0,
+        reproducciones: Number(cancionObj.reproducciones) || 0,
         activo: cancionObj.activo ?? true,
-        portada_url: cancionObj.portada_url,
-        portada_ruta: cancionObj.portada_ruta || null,
-        audio_url: cancionObj.audio_url,
-        audio_ruta: cancionObj.audio_ruta || null
-      })
+        plataforma_origen: ['spotify', 'youtube_music', 'youtube'].includes(cancionObj.plataforma_origen)
+          ? cancionObj.plataforma_origen
+          : 'spotify',
+        portada_url: cancionObj.portada_url || null,
+        spotify_track_id: cancionObj.spotify_track_id || null,
+        ytmusic_track_id: cancionObj.ytmusic_track_id || null,
+        youtube_video_id: cancionObj.youtube_video_id || null
+      }
+      const { error } = await supabase.from('canciones').upsert(payload)
+      if (error) {
+        console.warn('Supabase canciones.upsert:', error.message)
+      } else {
+        console.log('✓ Canción sincronizada en Supabase:', cancionObj.titulo)
+      }
     } catch (e) {
-      console.warn('Supabase upsert fallback:', e)
+      console.warn('Supabase persistSong fallback:', e)
+    }
+  },
+
+  async persistPlaylistToSupabase(playlistObj) {
+    if (!supabase) return
+    try {
+      const payload = {
+        id: playlistObj.id,
+        usuario_id: playlistObj.usuario_id,
+        organizacion_id: playlistObj.organizacion_id,
+        nombre: playlistObj.nombre,
+        descripcion: playlistObj.descripcion || null,
+        es_publica: Boolean(playlistObj.es_publica),
+        plataforma_origen: ['gavify', 'spotify', 'youtube_music', 'youtube'].includes(playlistObj.plataforma_origen)
+          ? playlistObj.plataforma_origen
+          : 'gavify',
+        portada_url: playlistObj.portada_url || null
+      }
+      const { error } = await supabase.from('playlists').upsert(payload)
+      if (error) {
+        console.warn('Supabase playlists.upsert:', error.message)
+      } else {
+        console.log('✓ Playlist sincronizada en Supabase:', playlistObj.nombre)
+      }
+    } catch (e) {
+      console.warn('Supabase persistPlaylist fallback:', e)
+    }
+  },
+
+  async persistPlaylistSongToSupabase(relItem) {
+    if (!supabase) return
+    try {
+      const payload = {
+        id: relItem.id,
+        playlist_id: relItem.playlist_id,
+        cancion_id: relItem.cancion_id,
+        posicion: Number(relItem.posicion) || 0
+      }
+      const { error } = await supabase.from('playlist_canciones').upsert(payload)
+      if (error) {
+        console.warn('Supabase playlist_canciones.upsert:', error.message)
+      } else {
+        console.log('✓ Asociación playlist-canción sincronizada en Supabase')
+      }
+    } catch (e) {
+      console.warn('Supabase persistPlaylistSong fallback:', e)
     }
   },
 
   async ensureSongSavedInDatabase(trackPayload) {
     requireActiveUser()
     return this.extractCancionFromApi(trackPayload)
+  },
+
+  /**
+   * Obtiene o crea automáticamente la playlist especial "Tus me gusta" del usuario
+   */
+  async getOrCreateFavoritosPlaylist() {
+    const user = requireActiveUser()
+    const playlists = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
+    let fav = playlists.find(
+      p =>
+        p.organizacion_id === user.organizacion_id &&
+        p.usuario_id === user.id &&
+        (p.nombre.toLowerCase() === 'tus me gusta' || p.tipo === 'favoritos')
+    )
+
+    if (!fav) {
+      fav = await this.createPlaylist({
+        nombre: 'Tus me gusta',
+        descripcion: 'Tus canciones favoritas guardadas con el corazón en Gavify',
+        es_publica: false,
+        plataforma_origen: 'gavify',
+        tipo: 'favoritos',
+        portada_url: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&auto=format&fit=crop&q=80'
+      })
+    }
+
+    return fav
+  },
+
+  /**
+   * Verifica si una canción está en la playlist "Tus me gusta"
+   */
+  async isCancionFavorita(cancionId) {
+    try {
+      const user = requireActiveUser()
+      const playlists = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
+      const fav = playlists.find(
+        p =>
+          p.organizacion_id === user.organizacion_id &&
+          p.usuario_id === user.id &&
+          (p.nombre.toLowerCase() === 'tus me gusta' || p.tipo === 'favoritos')
+      )
+      if (!fav) return false
+      const rels = loadCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, INITIAL_PLAYLIST_CANCIONES)
+      return rels.some(r => r.playlist_id === fav.id && r.cancion_id === cancionId)
+    } catch {
+      return false
+    }
+  },
+
+  /**
+   * Agrega o quita una canción de "Tus me gusta" con persistencia garantizada en la BD
+   */
+  async toggleCancionFavorita(trackPayload) {
+    const user = requireActiveUser()
+    const cancionGuardada = await this.extractCancionFromApi(trackPayload)
+    const favPlaylist = await this.getOrCreateFavoritosPlaylist()
+
+    const rels = loadCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, INITIAL_PLAYLIST_CANCIONES)
+    const existente = rels.find(
+      r => r.playlist_id === favPlaylist.id && r.cancion_id === cancionGuardada.id
+    )
+
+    if (existente) {
+      await this.removeCancionFromPlaylist(existente.id)
+      return { isLiked: false, cancion: cancionGuardada, playlist: favPlaylist }
+    } else {
+      await this.addCancionToPlaylist(favPlaylist.id, cancionGuardada.id)
+      return { isLiked: true, cancion: cancionGuardada, playlist: favPlaylist }
+    }
   },
 
   /**
@@ -876,6 +1002,7 @@ export const dbService = {
     playlists.unshift(nueva)
     saveCollection(STORAGE_KEYS.PLAYLISTS, playlists)
     this.markPlaylistUsed(nueva.id)
+    await this.persistPlaylistToSupabase(nueva)
 
     registrarEventoSeguridad({
       accion: 'INSERT playlist',
@@ -1045,6 +1172,10 @@ export const dbService = {
     })
   },
 
+  async getCancionesByPlaylist(playlistId) {
+    return this.getCancionesDePlaylist(playlistId)
+  },
+
   async createCleanPlaylistFromDeduplication(nombre, cancionIds = []) {
     const nueva = await this.createPlaylist({
       nombre,
@@ -1082,6 +1213,7 @@ export const dbService = {
     rels.push(nuevoItem)
     saveCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, rels)
     playlistsRevision.value++
+    await this.persistPlaylistSongToSupabase(nuevoItem)
     return nuevoItem
   },
 
@@ -1097,6 +1229,9 @@ export const dbService = {
       rels.filter(r => r.id !== playlistCancionId)
     )
     playlistsRevision.value++
+    if (supabase) {
+      supabase.from('playlist_canciones').delete().eq('id', playlistCancionId).then().catch(() => {})
+    }
     return true
   },
 
