@@ -8,7 +8,9 @@ import DashboardView from '@/views/DashboardView.vue'
 import RepeatedView from '@/views/RepeatedView.vue'
 import MusicaView from '@/views/MusicaView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
+import RolesTestView from '@/views/RolesTestView.vue'
 import { useAuth } from '@/services/auth'
+import { registrarEventoSeguridad } from '@/services/db'
 
 const routes = [
   {
@@ -33,7 +35,7 @@ const routes = [
     path: '/connect',
     name: 'connect',
     component: ConnectView,
-    meta: { requiresAuth: true }
+    meta: { requiresAuth: true, title: 'Conectar APIs Musicales' }
   },
   {
     path: '/dashboard',
@@ -51,19 +53,30 @@ const routes = [
         path: '/musica',
         name: 'musica',
         component: MusicaView,
-        meta: { title: 'Gestor de Música', requiresAuth: true }
+        meta: { title: 'Catálogo & Extractor de APIs', requiresAuth: true }
       },
       {
         path: '/repeated',
         name: 'repeated',
         component: RepeatedView,
-        meta: { title: 'Canciones repetidas', requiresAuth: true }
+        meta: { title: 'Canciones repetidas (MVP)', requiresAuth: true }
       },
       {
         path: '/playlists',
         name: 'playlists',
         component: PlaylistsView,
-        meta: { title: 'Playlists & estadísticas', requiresAuth: true }
+        meta: { title: 'Playlists & Listas', requiresAuth: true }
+      },
+      {
+        path: '/seguridad',
+        alias: '/usuarios',
+        name: 'seguridad',
+        component: RolesTestView,
+        meta: {
+          title: 'Administración de Usuarios',
+          requiresAuth: true,
+          allowedRoles: ['super_admin', 'admin']
+        }
       }
     ]
   },
@@ -81,14 +94,20 @@ const router = createRouter({
   }
 })
 
-// Navigation Guard (Vue Router 4 standard return format)
+// Navigation Guard (Protección de Rutas Privadas, Sesiones Vencidas y Roles RBAC)
 router.beforeEach((to) => {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, currentUser } = useAuth()
   const authenticated = isAuthenticated.value
 
-  // If route requires auth and user is not logged in
+  // 1. Si la ruta es privada y el usuario cerró sesión o no tiene sesión activa -> Bloquear y redirigir a /login
   if (to.matched.some(record => record.meta.requiresAuth)) {
-    if (!authenticated) {
+    if (!authenticated || !currentUser.value?.id) {
+      registrarEventoSeguridad({
+        accion: `ACCESO A RUTA PRIVADA (${to.fullPath})`,
+        recurso: to.fullPath,
+        permitido: false,
+        motivo: 'Usuario sin sesión activa o sesión cerrada intentó acceder por ruta directa.'
+      })
       return {
         path: '/login',
         query: { redirect: to.fullPath }
@@ -96,7 +115,22 @@ router.beforeEach((to) => {
     }
   }
 
-  // If route is guest-only (login/register) and user is already logged in
+  // 2. Si la ruta exige roles específicos (allowedRoles)
+  const requiredRoles = to.meta?.allowedRoles
+  if (requiredRoles && Array.isArray(requiredRoles)) {
+    const userRole = currentUser.value?.rol
+    if (!requiredRoles.includes(userRole)) {
+      registrarEventoSeguridad({
+        accion: `RUTA RESTRINGIDA POR ROL (${to.fullPath})`,
+        recurso: to.fullPath,
+        permitido: false,
+        motivo: `Rol '${userRole}' no autorizado para la ruta.`
+      })
+      return { path: '/dashboard' }
+    }
+  }
+
+  // 3. Si es una ruta solo para invitados (/login, /register) y ya hay sesión activa
   if (to.matched.some(record => record.meta.guestOnly)) {
     if (authenticated) {
       return { path: '/dashboard' }

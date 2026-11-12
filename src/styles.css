@@ -19,13 +19,23 @@ body {
     min-height: 100%;
     background: var(--ink);
     color: var(--cream);
-    font-family: Arial, Helvetica, sans-serif
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.025em;
+}
+
+button, input, select, textarea {
+    font-family: inherit;
+    color: inherit;
 }
 
 button {
-    font: inherit;
-    color: inherit;
-    cursor: pointer
+    cursor: pointer;
+    border-radius: 999px;
 }
 
 button:focus-visible,
@@ -64,8 +74,9 @@ a {
     color: var(--lime);
     display: grid;
     place-items: center;
-    font: 700 21px Georgia;
-    letter-spacing: -.12em
+    font: 800 18px 'Plus Jakarta Sans', sans-serif;
+    border-radius: 8px;
+    letter-spacing: -.04em
 }
 
 .logo b {
@@ -123,8 +134,8 @@ em {
 
 .hero h1,
 .connect h1 {
-    font: 400 clamp(48px, 6vw, 82px)/.97 Georgia;
-    letter-spacing: -.065em;
+    font: 800 clamp(42px, 5.2vw, 72px)/1.04 'Plus Jakarta Sans', 'Inter', sans-serif;
+    letter-spacing: -.035em;
     margin: 21px 0 25px
 }
 
@@ -139,15 +150,17 @@ em {
 .primary,
 .spotify {
     border: 0;
+    border-radius: 999px;
     background: var(--lime);
     color: #152016;
-    padding: 14px 18px;
-    font-size: 12px;
+    padding: 12px 20px;
+    font-size: 13px;
     font-weight: 700;
     transition: .2s;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
 }
 
 .primary:hover,
@@ -227,15 +240,16 @@ em {
 
 .vinyl-label {
     position: absolute;
-    font: italic 42px Georgia;
+    font: 800 36px 'Plus Jakarta Sans', sans-serif;
     color: #1d241c
 }
 
 .card {
     position: absolute;
-    padding: 15px 17px;
+    padding: 16px 20px;
     background: #242822e8;
     border: 1px solid #495044;
+    border-radius: 16px;
     display: flex;
     flex-direction: column;
     gap: 5px;
@@ -243,7 +257,7 @@ em {
 }
 
 .card strong {
-    font: 20px Georgia
+    font: 700 20px 'Plus Jakarta Sans', sans-serif
 }
 
 .card small,
@@ -412,8 +426,7 @@ em {
     text-decoration: none;
 }
 
-.nav.active,
-.nav.router-link-active {
+.nav.active {
     background: #293026;
     color: var(--lime)
 }
@@ -491,7 +504,7 @@ em {
 
 .topbar h1 {
     margin: 0;
-    font: 25px Georgia
+    font: 700 22px 'Plus Jakarta Sans', 'Inter', sans-serif
 }
 
 .top-actions {
@@ -532,30 +545,36 @@ em {
 }
 
 .row h2 {
-    font: 400 32px Georgia;
-    letter-spacing: -.05em;
-    margin: 12px 0 0
+    font: 700 28px 'Plus Jakarta Sans', 'Inter', sans-serif;
+    letter-spacing: -.03em;
+    margin: 8px 0 0
 }
 
 .outline,
 .text {
     background: none;
     border: 1px solid #465043;
-    padding: 12px 15px;
-    font-size: 11px
+    border-radius: 999px;
+    padding: 10px 18px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
 }
 
 .stats {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin: 34px 0 13px
+    gap: 14px;
+    margin: 28px 0 16px
 }
 
 .stat,
 .panel {
     background: var(--panel);
-    border: 1px solid #30362f
+    border: 1px solid #30362f;
+    border-radius: 16px;
 }
 
 .stat {
@@ -565,18 +584,18 @@ em {
 
 .stat strong {
     display: block;
-    font: 28px Georgia;
-    margin: 19px 0 7px
+    font: 800 26px 'Plus Jakarta Sans', 'Inter', sans-serif;
+    margin: 16px 0 7px
 }
 
 .grid {
     display: grid;
     grid-template-columns: 1.1fr .9fr;
-    gap: 13px
+    gap: 16px
 }
 
 .panel {
-    padding: 21px
+    padding: 22px
 }
 
 .panel-head {
@@ -586,8 +605,8 @@ em {
 }
 
 .panel h3 {
-    font: 400 20px Georgia;
-    margin: 9px 0 0
+    font: 700 19px 'Plus Jakarta Sans', 'Inter', sans-serif;
+    margin: 6px 0 0
 }
 
 .muted,
@@ -634,7 +653,8 @@ em {
 .bar {
     width: 24px;
     background: var(--lime);
-    min-height: 18px
+    min-height: 18px;
+    border-radius: 8px 8px 0 0;
 }
 
 .songs {
@@ -652,7 +672,8 @@ em {
 
 .art {
     width: 38px;
-    height: 38px
+    height: 38px;
+    border-radius: 10px;
 }
 
 .song-info strong,
@@ -661,25 +682,27 @@ em {
 }
 
 .song-info strong {
-    font-size: 12px
+    font-size: 13px
 }
 
 .song-info small {
     color: var(--muted);
-    font-size: 10px;
+    font-size: 11px;
     margin-top: 4px
 }
 
 .plays {
     color: #879082;
-    font-size: 10px
+    font-size: 11px
 }
 
 .insight {
-    margin-top: 13px;
+    margin-top: 16px;
     background: #263027;
-    padding: 18px;
+    padding: 18px 22px;
+    border-radius: 16px;
     display: flex;
+    align-items: center;
     gap: 16px
 }
 
@@ -766,12 +789,13 @@ em {
 .playlist {
     padding: 24px;
     background: #263027;
-    min-height: 220px
+    min-height: 220px;
+    border-radius: 16px;
 }
 
 .feature h3,
 .playlist h3 {
-    font: 400 25px Georgia;
+    font: 700 22px 'Plus Jakarta Sans', 'Inter', sans-serif;
     margin: 18px 0 10px
 }
 
@@ -1164,12 +1188,12 @@ em {
 }
 
 .auth-card-top h1 {
-    font-size: 38px;
-    line-height: 1.05;
+    font-size: 34px;
+    line-height: 1.1;
     letter-spacing: -.03em;
     margin: 8px 0 12px;
-    font-family: Georgia, serif;
-    font-weight: 400;
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    font-weight: 800;
 }
 
 .auth-card-top h1 em {
