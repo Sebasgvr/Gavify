@@ -33,310 +33,41 @@ function normalizePlatform(plat) {
 }
 
 // Datos iniciales para las organizaciones con IDs reales de canciones completas (solo Spotify, YT Music y YouTube)
-const INITIAL_CANCIONES = [
-  // --- ORGANIZACIÓN 1: SEBAS MUSIC HUB (11111111-1111-1111-1111-111111111111) ---
-  {
-    id: 'c1111111-1111-1111-1111-111111111111',
-    usuario_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    autor_nombre: 'Sebastian Gavilan',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    titulo: 'As It Was',
-    artista: 'Harry Styles',
-    album: 'Harrys House',
-    genero: 'Pop',
-    duracion_segundos: 165,
-    reproducciones: 48,
-    activo: true,
-    plataforma_origen: 'spotify',
-    es_produccion_propia: false,
-    spotify_track_id: 'spotify:track:4pt5fOT96fPqDk6q5pQG',
-    youtube_video_id: 'Qfm6nfz1QNQ',
-    youtube_candidates: ['Qfm6nfz1QNQ', 'EsY5kRIBM8Y', 'S-3s3BckRjc'],
-    portada_url: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-15T14:20:00Z',
-    actualizado_en: '2026-10-15T14:20:00Z'
-  },
-  {
-    id: 'c1111111-1111-1111-1111-111111111112',
-    usuario_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    autor_nombre: 'Sebastian Gavilan',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    titulo: 'Blinding Lights',
-    artista: 'The Weeknd',
-    album: 'After Hours',
-    genero: 'Indie Pop',
-    duracion_segundos: 200,
-    reproducciones: 42,
-    activo: true,
-    plataforma_origen: 'spotify',
-    es_produccion_propia: false,
-    spotify_track_id: 'spotify:track:0VjIjW4GlUZAMYd2vXMi3b',
-    youtube_video_id: 'XwxLwG2_Sxk',
-    youtube_candidates: ['XwxLwG2_Sxk', '13pZOoLr46M', 'oxzQsfEuRDo'],
-    portada_url: 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-16T10:15:00Z',
-    actualizado_en: '2026-10-16T10:15:00Z'
-  },
-  {
-    id: 'c1111111-1111-1111-1111-111111111113',
-    usuario_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    autor_nombre: 'Lucía Martínez',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    titulo: 'Flowers',
-    artista: 'Miley Cyrus',
-    album: 'Endless Summer Vacation',
-    genero: 'Pop',
-    duracion_segundos: 198,
-    reproducciones: 37,
-    activo: true,
-    plataforma_origen: 'youtube_music',
-    es_produccion_propia: false,
-    ytmusic_track_id: 'ytm_flowers_01',
-    youtube_video_id: 'iawgB2CDCrw',
-    youtube_candidates: ['iawgB2CDCrw', 'o1dfTZS8E90', 'G7KNmW9a75Y'],
-    portada_url: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-17T18:00:00Z',
-    actualizado_en: '2026-10-17T18:00:00Z'
-  },
-  {
-    id: 'c1111111-1111-1111-1111-111111111114',
-    usuario_id: 'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    autor_nombre: 'Mateo López',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    titulo: 'Calm Down',
-    artista: 'Rema, Selena Gomez',
-    album: 'Rave & Roses Ultra',
-    genero: 'Trap / Urbano',
-    duracion_segundos: 237,
-    reproducciones: 32,
-    activo: true,
-    plataforma_origen: 'youtube',
-    es_produccion_propia: false,
-    youtube_video_id: 'G-D80U_u3sk',
-    youtube_candidates: ['G-D80U_u3sk', 'XCXobyGlAzc', 'WcIcVapfqXw'],
-    portada_url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-18T11:30:00Z',
-    actualizado_en: '2026-10-18T11:30:00Z'
-  },
-  {
-    id: 'c1111111-1111-1111-1111-111111111115',
-    usuario_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    autor_nombre: 'Julián Torres',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    titulo: 'BZRP Music Sessions #52',
-    artista: 'Bizarrap, Quevedo',
-    album: 'Bizarrap Live Sessions',
-    genero: 'Electrónica',
-    duracion_segundos: 199,
-    reproducciones: 65,
-    activo: true,
-    plataforma_origen: 'youtube_music',
-    es_produccion_propia: false,
-    youtube_video_id: 'tJWWJiVYiUA',
-    youtube_candidates: ['tJWWJiVYiUA', 'lI3Q9_hg7zA', 'A_g3lMcWVy0'],
-    portada_url: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-19T16:45:00Z',
-    actualizado_en: '2026-10-19T16:45:00Z'
-  },
+// Sin música ni playlists falsas pre-cargadas: cada usuario gestiona únicamente su música real
+const INITIAL_CANCIONES = []
+const INITIAL_PLAYLISTS = []
+const INITIAL_PLAYLIST_CANCIONES = []
+const INITIAL_ANALISIS = []
 
-  // --- ORGANIZACIÓN 2: RADIO URBANA RECORDS (22222222-2222-2222-2222-222222222222) ---
-  {
-    id: 'c2222222-2222-2222-2222-222222222221',
-    usuario_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    autor_nombre: 'Lucía Martínez',
-    organizacion_id: '22222222-2222-2222-2222-222222222222',
-    titulo: 'Midnight City',
-    artista: 'M83',
-    album: 'Hurry Up, We Are Dreaming',
-    genero: 'Electrónica',
-    duracion_segundos: 243,
-    reproducciones: 85,
-    activo: true,
-    plataforma_origen: 'spotify',
-    es_produccion_propia: false,
-    spotify_track_id: 'spotify:track:6GyFP1nfCDB8lbD2bG06q9',
-    youtube_video_id: '8zf7Ht4hqsc',
-    youtube_candidates: ['8zf7Ht4hqsc', '1D2ItvuOlV4', 'GmCtz3Vpdrk'],
-    portada_url: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-14T09:00:00Z',
-    actualizado_en: '2026-10-14T09:00:00Z'
-  },
-  {
-    id: 'c2222222-2222-2222-2222-222222222222',
-    usuario_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    autor_nombre: 'Lucía Martínez',
-    organizacion_id: '22222222-2222-2222-2222-222222222222',
-    titulo: 'Breezeblocks',
-    artista: 'alt-J',
-    album: 'An Awesome Wave',
-    genero: 'Alternativo',
-    duracion_segundos: 227,
-    reproducciones: 64,
-    activo: true,
-    plataforma_origen: 'youtube_music',
-    es_produccion_propia: false,
-    ytmusic_track_id: 'ytm_breeze_02',
-    youtube_video_id: 'pHx252Gfdms',
-    youtube_candidates: ['pHx252Gfdms', 'nPlXdFwWcV4', 'ywg-WCQFwwQ'],
-    portada_url: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-15T12:30:00Z',
-    actualizado_en: '2026-10-15T12:30:00Z'
-  },
-  {
-    id: 'c2222222-2222-2222-2222-222222222223',
-    usuario_id: 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    autor_nombre: 'Valentina Ruiz',
-    organizacion_id: '22222222-2222-2222-2222-222222222222',
-    titulo: 'Viva La Vida',
-    artista: 'Coldplay',
-    album: 'Viva La Vida or Death and All His Friends',
-    genero: 'Rock',
-    duracion_segundos: 243,
-    reproducciones: 110,
-    activo: true,
-    plataforma_origen: 'spotify',
-    es_produccion_propia: false,
-    youtube_video_id: 'y4zdDXPYo0I',
-    youtube_candidates: ['y4zdDXPYo0I', 'BA-YR8ptlK0', 'dvgZkm1xWPE'],
-    portada_url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80',
-    audio_url: '',
-    creado_en: '2026-10-16T15:00:00Z',
-    actualizado_en: '2026-10-16T15:00:00Z'
-  }
+const LEGACY_FAKE_PREFIXES = [
+  'c1111111-',
+  'c2222222-',
+  'p1111111-',
+  'p2222222-',
+  'pc-10',
+  'pc-20',
+  'd1111111-',
+  'd2222222-'
 ]
 
-const INITIAL_PLAYLISTS = [
-  // --- ORGANIZACIÓN 1: SEBAS MUSIC HUB ---
-  {
-    id: 'p1111111-1111-1111-1111-111111111111',
-    usuario_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    nombre: 'Favoritas 2026 (Spotify)',
-    descripcion: 'Las pistas más sonadas del año sincronizadas desde Spotify Web API',
-    es_publica: false,
-    plataforma_origen: 'spotify',
-    portada_url: 'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400&auto=format&fit=crop&q=80',
-    creado_en: '2026-10-15T15:00:00Z',
-    actualizado_en: '2026-10-15T15:00:00Z'
-  },
-  {
-    id: 'p1111111-1111-1111-1111-111111111112',
-    usuario_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    nombre: 'Tu lado B (Mix YT Music & Spotify)',
-    descripcion: 'Lista combinada de Spotify, YT Music y YouTube para salir de la rutina',
-    es_publica: true,
-    plataforma_origen: 'gavify',
-    portada_url: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&auto=format&fit=crop&q=80',
-    creado_en: '2026-10-16T18:00:00Z',
-    actualizado_en: '2026-10-16T18:00:00Z'
-  },
-  {
-    id: 'p1111111-1111-1111-1111-111111111113',
-    usuario_id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    nombre: 'Hits Electrónicos & Sesiones',
-    descripcion: 'Sesiones electrónicas y lanzamientos sincronizados de YT Music y Spotify',
-    es_publica: true,
-    plataforma_origen: 'youtube_music',
-    portada_url: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=400&auto=format&fit=crop&q=80',
-    creado_en: '2026-10-19T17:00:00Z',
-    actualizado_en: '2026-10-19T17:00:00Z'
-  },
-
-  // --- ORGANIZACIÓN 2: RADIO URBANA RECORDS ---
-  {
-    id: 'p2222222-2222-2222-2222-222222222221',
-    usuario_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    organizacion_id: '22222222-2222-2222-2222-222222222222',
-    nombre: 'Domingo Lento (Radio Urbana)',
-    descripcion: 'Música chillout y electrónica para transmisión dominical de Radio Urbana',
-    es_publica: true,
-    plataforma_origen: 'spotify',
-    portada_url: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&auto=format&fit=crop&q=80',
-    creado_en: '2026-10-14T10:00:00Z',
-    actualizado_en: '2026-10-14T10:00:00Z'
-  },
-  {
-    id: 'p2222222-2222-2222-2222-222222222222',
-    usuario_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    organizacion_id: '22222222-2222-2222-2222-222222222222',
-    nombre: 'Descubrimientos YouTube Music',
-    descripcion: 'Radar de novedades indie extraídas desde YouTube Music API',
-    es_publica: false,
-    plataforma_origen: 'youtube_music',
-    portada_url: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=400&auto=format&fit=crop&q=80',
-    creado_en: '2026-10-15T14:00:00Z',
-    actualizado_en: '2026-10-15T14:00:00Z'
-  }
-]
-
-const INITIAL_PLAYLIST_CANCIONES = [
-  // Sebas Music Hub: Canciones repetidas DENTRO de la misma playlist (por haberse agregado más de una vez)
-  // Playlist 1: Favoritas 2026 (Spotify) -> 'As It Was' repetida en posición #1 y #4
-  { id: 'pc-101', playlist_id: 'p1111111-1111-1111-1111-111111111111', cancion_id: 'c1111111-1111-1111-1111-111111111111', posicion: 0 },
-  { id: 'pc-102', playlist_id: 'p1111111-1111-1111-1111-111111111111', cancion_id: 'c1111111-1111-1111-1111-111111111112', posicion: 1 },
-  { id: 'pc-103', playlist_id: 'p1111111-1111-1111-1111-111111111111', cancion_id: 'c1111111-1111-1111-1111-111111111113', posicion: 2 },
-  { id: 'pc-103-dup', playlist_id: 'p1111111-1111-1111-1111-111111111111', cancion_id: 'c1111111-1111-1111-1111-111111111111', posicion: 3 }, // As It Was agregada de nuevo en la misma playlist
-
-  // Playlist 2: Tu lado B -> 'Blinding Lights' repetida 2 veces dentro de esta misma playlist
-  { id: 'pc-104', playlist_id: 'p1111111-1111-1111-1111-111111111112', cancion_id: 'c1111111-1111-1111-1111-111111111111', posicion: 0 },
-  { id: 'pc-105', playlist_id: 'p1111111-1111-1111-1111-111111111112', cancion_id: 'c1111111-1111-1111-1111-111111111112', posicion: 1 },
-  { id: 'pc-106', playlist_id: 'p1111111-1111-1111-1111-111111111112', cancion_id: 'c1111111-1111-1111-1111-111111111114', posicion: 2 },
-  { id: 'pc-107', playlist_id: 'p1111111-1111-1111-1111-111111111112', cancion_id: 'c1111111-1111-1111-1111-111111111112', posicion: 3 }, // Blinding Lights repetida en la misma playlist
-  { id: 'pc-107b', playlist_id: 'p1111111-1111-1111-1111-111111111112', cancion_id: 'c1111111-1111-1111-1111-111111111115', posicion: 4 },
-
-  // Playlist 3: Beats & Demos de Productor -> Sin repetidas
-  { id: 'pc-108', playlist_id: 'p1111111-1111-1111-1111-111111111113', cancion_id: 'c1111111-1111-1111-1111-111111111115', posicion: 0 },
-  { id: 'pc-109', playlist_id: 'p1111111-1111-1111-1111-111111111113', cancion_id: 'c1111111-1111-1111-1111-111111111111', posicion: 1 },
-
-  // Radio Urbana Records: Midnight City repetida dentro de la misma lista
-  { id: 'pc-201', playlist_id: 'p2222222-2222-2222-2222-222222222221', cancion_id: 'c2222222-2222-2222-2222-222222222221', posicion: 0 },
-  { id: 'pc-202', playlist_id: 'p2222222-2222-2222-2222-222222222221', cancion_id: 'c2222222-2222-2222-2222-222222222222', posicion: 1 },
-  { id: 'pc-202-dup', playlist_id: 'p2222222-2222-2222-2222-222222222221', cancion_id: 'c2222222-2222-2222-2222-222222222221', posicion: 2 },
-  { id: 'pc-203', playlist_id: 'p2222222-2222-2222-2222-222222222222', cancion_id: 'c2222222-2222-2222-2222-222222222221', posicion: 0 },
-  { id: 'pc-204', playlist_id: 'p2222222-2222-2222-2222-222222222223', posicion: 1 }
-]
-
-const INITIAL_ANALISIS = [
-  {
-    id: 'd1111111-1111-1111-1111-111111111111',
-    usuario_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    autor_nombre: 'Sebastian Gavilan',
-    organizacion_id: '11111111-1111-1111-1111-111111111111',
-    fecha_analisis: '2026-10-22T18:30:00Z',
-    total_playlists_escaneadas: 3,
-    total_canciones_escaneadas: 9,
-    total_duplicados_detectados: 3,
-    estado: 'pendiente',
-    notas: 'Escaneo inicial automático de Sebas Music Hub (Spotify + YouTube Music + Producciones).'
-  },
-  {
-    id: 'd2222222-2222-2222-2222-222222222222',
-    usuario_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    autor_nombre: 'Lucía Martínez',
-    organizacion_id: '22222222-2222-2222-2222-222222222222',
-    fecha_analisis: '2026-10-21T11:15:00Z',
-    total_playlists_escaneadas: 2,
-    total_canciones_escaneadas: 4,
-    total_duplicados_detectados: 1,
-    estado: 'pendiente',
-    notas: 'Auditoría semanal de programación de Radio Urbana Records.'
-  }
-]
+function isFakeSeedRecord(item) {
+  const id = String(item?.id || '')
+  return LEGACY_FAKE_PREFIXES.some(prefix => id.startsWith(prefix))
+}
 
 function loadCollection(key, defaultData) {
   try {
     const raw = localStorage.getItem(key)
     if (raw) {
-      return JSON.parse(raw)
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) {
+        const cleaned = parsed.filter(item => !isFakeSeedRecord(item))
+        if (cleaned.length !== parsed.length) {
+          localStorage.setItem(key, JSON.stringify(cleaned))
+        }
+        return cleaned
+      }
+      return parsed
     }
     localStorage.setItem(key, JSON.stringify(defaultData))
     return JSON.parse(JSON.stringify(defaultData))

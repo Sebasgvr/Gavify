@@ -40,42 +40,31 @@
         </div>
       </div>
 
-      <!-- Selector de Plataforma para elegir de qué plataforma quieres la canción -->
+      <!-- Selector Multi-Plataforma: elige Todas, 2 o 1 plataforma a la vez -->
       <div class="platform-tabs">
+        <button
+          type="button"
+          class="plat-tab"
+          :class="{ active: todasSeleccionadas }"
+          @click="seleccionarTodasLasPlataformas"
+        >
+          <span>Todas</span>
+        </button>
         <button
           v-for="plat in plataformasExtractor"
           :key="plat.id"
+          type="button"
           class="plat-tab"
-          :class="{ active: plataformaActiva === plat.id }"
-          @click="cambiarPlataformaExtractor(plat.id)"
+          :class="{ active: plataformasActivas.includes(plat.id) }"
+          @click="togglePlataforma(plat.id)"
         >
           <AppIcon :name="plat.id" :size="18" />
           <span>{{ plat.nombre }}</span>
         </button>
       </div>
 
-      <!-- Sub-modos: Búsqueda Automática en Vivo vs Playlists Conectadas -->
-      <div class="extractor-mode-bar">
-        <button
-          class="mode-pill"
-          :class="{ active: modoExtractor === 'busqueda' }"
-          @click="modoExtractor = 'busqueda'"
-        >
-          <AppIcon name="search" :size="14" />
-          <span>Buscar canciones en {{ nombrePlataformaActiva }}</span>
-        </button>
-        <button
-          class="mode-pill"
-          :class="{ active: modoExtractor === 'playlists' }"
-          @click="modoExtractor = 'playlists'"
-        >
-          <AppIcon name="playlist" :size="14" />
-          <span>Playlists conectadas ({{ catalogoPlataformaActiva.playlists.length }})</span>
-        </button>
-      </div>
-
-      <!-- Modo A: Búsqueda automática al escribir -->
-      <div v-if="modoExtractor === 'busqueda'" class="extractor-search-area">
+      <!-- Búsqueda en vivo multi-plataforma -->
+      <div class="extractor-search-area">
         <div class="search-api-bar">
           <div class="live-input-box">
             <AppIcon name="search" :size="16" />
@@ -85,6 +74,15 @@
               placeholder="Artista, canción, álbum..."
             />
             <span v-if="buscandoApi" class="live-status">Buscando...</span>
+            <button
+              v-if="consultaApi"
+              type="button"
+              class="search-clear-x"
+              title="Borrar búsqueda"
+              @click="limpiarBusqueda"
+            >
+              <AppIcon name="close" :size="13" />
+            </button>
           </div>
         </div>
 
@@ -103,12 +101,12 @@
         </div>
 
         <div v-if="buscandoApi && !resultadosApi.length" class="empty-state">
-          <p>Buscando automáticamente en {{ nombrePlataformaActiva }}...</p>
+          <p>Buscando en {{ etiquetaPlataformasActivas }}...</p>
         </div>
 
         <div v-else-if="resultadosApi.length" class="api-results-list">
           <div class="api-results-head">
-            <span class="tiny">RESULTADOS EN {{ nombrePlataformaActiva.toUpperCase() }} ({{ resultadosApi.length }})</span>
+            <span class="tiny">RESULTADOS EN {{ etiquetaPlataformasActivas.toUpperCase() }} ({{ resultadosApi.length }})</span>
           </div>
 
           <div class="api-cards-grid">
@@ -122,8 +120,8 @@
                   <MarqueeText :text="item.artista + (item.album ? ' • ' + item.album : '')" class="api-track-artist" />
                 </div>
                 <div class="api-track-badges">
-                  <span :class="['origin-badge', `origin-${item.plataforma_origen || plataformaActiva}`]">
-                    {{ etiquetaPlataforma(item.plataforma_origen || plataformaActiva) }}
+                  <span :class="['origin-badge', `origin-${item.plataforma_origen || 'spotify'}`]">
+                    {{ etiquetaPlataforma(item.plataforma_origen) }}
                   </span>
                   <span class="genre-pill">{{ item.genero }}</span>
                   <span class="tiny">{{ formatearDuracion(item.duracion_segundos) }}</span>
@@ -151,261 +149,7 @@
           </div>
         </div>
       </div>
-
-      <!-- Modo B: Extracción de Playlists Conectadas -->
-      <div v-else class="extractor-playlists-area">
-        <div class="synced-playlists-grid">
-          <div
-            v-for="pl in catalogoPlataformaActiva.playlists"
-            :key="pl.externalId"
-            class="synced-pl-card"
-          >
-            <div class="synced-pl-head">
-              <div>
-                <span class="tiny accent">{{ nombrePlataformaActiva.toUpperCase() }} PLAYLIST</span>
-                <h4>{{ pl.nombre }}</h4>
-                <p>{{ pl.descripcion }}</p>
-              </div>
-              <button class="primary btn-sm" @click="importarPlaylistCompleta(pl)">
-                <AppIcon name="bolt" :size="14" />
-                <span>Importar lista ({{ pl.canciones.length }})</span>
-              </button>
-            </div>
-            <ul class="synced-pl-tracks">
-              <li v-for="(tr, idx) in pl.canciones" :key="idx">
-                <span>{{ tr.titulo }} — <small>{{ tr.artista }} ({{ tr.album }})</small></span>
-                <div class="synced-track-btns">
-                  <button class="icon-play-btn" title="Escuchar entera" @click="reproducirCancion(tr, pl.canciones)">
-                    <AppIcon name="play" :size="13" />
-                  </button>
-                  <button
-                    class="icon-add-btn"
-                    title="Agregar canción a una playlist (+)"
-                    @click="abrirModalAgregar(tr)"
-                  >
-                    <AppIcon name="plus" :size="15" />
-                  </button>
-                </div>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </section>
-
-    <!-- ======================================================================= -->
-    <!-- LISTADO PRINCIPAL CON BÚSQUEDA AUTOMÁTICA, FILTROS Y ORDENAMIENTO       -->
-    <!-- ======================================================================= -->
-    <section class="panel list-panel">
-      <div class="panel-head list-header-wrap">
-        <div>
-          <span class="tiny">BIBLIOTECA DE {{ auth.currentUser.value?.organizacion_nombre?.toUpperCase() }}</span>
-          <h3>Catálogo de canciones ({{ cancionesFiltradasYOrdenadas.length }} de {{ canciones.length }})</h3>
-        </div>
-
-        <div class="filters-toolbar">
-          <!-- Búsqueda automática al escribir -->
-          <div class="catalog-search-pill">
-            <AppIcon name="search" :size="15" />
-            <input
-              v-model="filtroBusqueda"
-              type="text"
-              placeholder="Buscar por nombre, artista o álbum..."
-            />
-          </div>
-
-          <!-- Filtro por Plataforma de Origen con diseño personalizado -->
-          <CustomSelect
-            v-model="filtroPlataforma"
-            :options="opcionesFiltroPlataforma"
-          />
-
-          <!-- Filtro por Género con diseño personalizado -->
-          <CustomSelect
-            v-model="filtroGenero"
-            :options="opcionesFiltroGenero"
-          />
-
-          <!-- Opción para Ordenar la Información con diseño personalizado -->
-          <CustomSelect
-            v-model="criterioOrden"
-            :options="opcionesOrden"
-            variant="accent"
-          />
-
-          <button class="outline btn-sm" @click="limpiarFiltros">Limpiar</button>
-        </div>
-      </div>
-
-      <div v-if="cargando && !canciones.length" class="empty-state">
-        <p>Cargando canciones de la base de datos...</p>
-      </div>
-
-      <div v-else-if="!cancionesFiltradasYOrdenadas.length" class="empty-state">
-        <p>No se encontraron canciones con los filtros seleccionados.</p>
-      </div>
-
-      <div v-else class="songs-table-wrapper">
-        <table class="songs-table">
-          <thead>
-            <tr>
-              <th style="width: 58px;">Play</th>
-              <th>Título y Artista</th>
-              <th>Origen</th>
-              <th>Álbum</th>
-              <th>Género</th>
-              <th>Duración</th>
-              <th>Plays</th>
-              <th style="text-align: right;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="cancion in cancionesFiltradasYOrdenadas"
-              :key="cancion.id"
-              :class="{ 'playing-row': player.currentTrack.value?.id === cancion.id }"
-            >
-              <td>
-                <div class="song-thumbnail-wrap" @click="reproducirCancion(cancion, cancionesFiltradasYOrdenadas)">
-                  <img
-                    v-if="cancion.portada_url"
-                    :src="cancion.portada_url"
-                    :alt="cancion.titulo"
-                    class="song-thumbnail"
-                  />
-                  <div v-else class="song-thumbnail song-thumb-empty">
-                    <AppIcon name="music" :size="16" />
-                  </div>
-
-                  <button
-                    class="play-overlay-btn"
-                    :title="'Escuchar canción entera: ' + cancion.titulo"
-                  >
-                    <AppIcon :name="player.currentTrack.value?.id === cancion.id && player.isPlaying.value ? 'pause' : 'play'" :size="15" />
-                  </button>
-                </div>
-              </td>
-              <td>
-                <div class="song-title-group">
-                  <strong class="clickable-title" @click="reproducirCancion(cancion, cancionesFiltradasYOrdenadas)">
-                    {{ cancion.titulo }}
-                  </strong>
-                  <small>{{ cancion.artista }}</small>
-                </div>
-              </td>
-              <td>
-                <span :class="['origin-badge', `origin-${cancion.plataforma_origen || 'spotify'}`]">
-                  {{ etiquetaPlataforma(cancion.plataforma_origen) }}
-                </span>
-              </td>
-              <td class="muted-td">{{ cancion.album || 'Single' }}</td>
-              <td>
-                <span v-if="cancion.genero" class="genre-pill">{{ cancion.genero }}</span>
-                <span v-else class="muted-td">—</span>
-              </td>
-              <td class="muted-td">{{ formatearDuracion(cancion.duracion_segundos) }}</td>
-              <td>
-                <strong class="plays-badge">{{ cancion.reproducciones || 0 }}</strong>
-              </td>
-              <td style="text-align: right;">
-                <div class="table-actions">
-                  <button class="outline btn-sm" @click="verDetalleCancion(cancion)">
-                    Detalle
-                  </button>
-                  <button
-                    class="danger-btn btn-sm"
-                    @click="solicitarConfirmacionEliminar(cancion)"
-                  >
-                    <AppIcon name="trash" :size="13" />
-                    <span>Eliminar</span>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <!-- ======================================================================= -->
-    <!-- MODAL DE DETALLE DE CANCIÓN                                             -->
-    <!-- ======================================================================= -->
-    <div v-if="cancionDetalle" class="modal-backdrop" @click.self="cancionDetalle = null">
-      <div class="modal-card panel detail-modal">
-        <div class="panel-head">
-          <div>
-            <span class="tiny accent">FICHA DE CANCIÓN</span>
-            <h3>{{ cancionDetalle.titulo }}</h3>
-          </div>
-          <button class="outline btn-sm" @click="cancionDetalle = null">
-            <AppIcon name="close" :size="14" />
-          </button>
-        </div>
-
-        <div class="detail-body">
-          <div class="detail-top">
-            <img
-              v-if="cancionDetalle.portada_url"
-              :src="cancionDetalle.portada_url"
-              :alt="cancionDetalle.titulo"
-              class="detail-cover"
-            />
-            <div class="detail-meta-grid">
-              <div><small>ARTISTA / AUTOR</small><strong>{{ cancionDetalle.artista }}</strong></div>
-              <div><small>ÁLBUM</small><strong>{{ cancionDetalle.album || 'Single' }}</strong></div>
-              <div><small>GÉNERO</small><strong>{{ cancionDetalle.genero || 'Sin clasificar' }}</strong></div>
-              <div><small>DURACIÓN</small><strong>{{ formatearDuracion(cancionDetalle.duracion_segundos) }}</strong></div>
-              <div><small>PLATAFORMA ORIGEN</small><strong>{{ etiquetaPlataforma(cancionDetalle.plataforma_origen) }}</strong></div>
-              <div><small>ORGANIZACIÓN</small><strong>{{ auth.currentUser.value?.organizacion_nombre }}</strong></div>
-            </div>
-          </div>
-
-          <div v-if="cancionDetalle.youtube_video_id && !cancionDetalle.youtube_video_id.startsWith('yt_')" class="youtube-embed-box">
-            <p class="tiny">VIDEO OFICIAL YOUTUBE ({{ cancionDetalle.youtube_video_id }})</p>
-            <iframe
-              width="100%"
-              height="220"
-              :src="`https://www.youtube.com/embed/${cancionDetalle.youtube_video_id}`"
-              title="YouTube video player"
-              frameborder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowfullscreen
-              style="border-radius: 14px;"
-            ></iframe>
-          </div>
-        </div>
-
-        <div class="form-actions">
-          <button class="primary" @click="reproducirCancion(cancionDetalle, cancionesFiltradasYOrdenadas)">
-            <AppIcon name="play" :size="15" />
-            <span>Escuchar canción entera</span>
-          </button>
-          <button class="outline" @click="cancionDetalle = null">Cerrar</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ======================================================================= -->
-    <!-- MODAL DE CONFIRMACIÓN ANTES DE ELIMINAR CANCIÓN                         -->
-    <!-- ======================================================================= -->
-    <div v-if="cancionPorEliminar" class="modal-backdrop" @click.self="cancionPorEliminar = null">
-      <div class="modal-card panel confirm-modal">
-        <span class="tiny danger-text">CONFIRMACIÓN</span>
-        <h3>¿Eliminar "{{ cancionPorEliminar.titulo }}" de tu biblioteca?</h3>
-        <p class="subtext">
-          Esta acción eliminará la canción de <strong>{{ cancionPorEliminar.artista }}</strong> y la quitará de las playlists donde esté incluida.
-        </p>
-        <div class="form-actions">
-          <button class="danger-btn" :disabled="cargando" @click="confirmarEliminacion">
-            <AppIcon name="trash" :size="14" />
-            <span>Sí, eliminar canción</span>
-          </button>
-          <button class="outline" @click="cancionPorEliminar = null">
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
 
     <!-- MODAL PARA AGREGAR A PLAYLIST CON SELECTOR DE LISTAS O CREAR UNA NUEVA -->
     <AddToPlaylistModal
@@ -418,14 +162,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import VinylThumb from '@/components/VinylThumb.vue'
-import CustomSelect from '@/components/CustomSelect.vue'
 import AddToPlaylistModal from '@/components/AddToPlaylistModal.vue'
 import MarqueeText from '@/components/MarqueeText.vue'
 import { useAuth } from '@/services/auth'
-import { dbService } from '@/services/db'
 import { musicApiService } from '@/services/musicApis'
 import { usePlayer } from '@/services/player'
 
@@ -504,13 +246,10 @@ const audioUrlExistente = ref('')
 const inputAudio = ref(null)
 
 // Extractor / Buscador Automático de APIs (Siempre activo)
-const mostrarExtractor = ref(true)
-const plataformaActiva = ref('spotify')
-const modoExtractor = ref('busqueda')
+const plataformasActivas = ref(['spotify'])
 const consultaApi = ref('')
 const buscandoApi = ref(false)
 const resultadosApi = ref([])
-const playlistDestinoExtraccion = ref('')
 let apiSearchDebounce = null
 
 const plataformasExtractor = [
@@ -518,6 +257,40 @@ const plataformasExtractor = [
   { id: 'youtube_music', nombre: 'YouTube Music', color: '#ff4e45' },
   { id: 'youtube', nombre: 'YouTube', color: '#ff0000' }
 ]
+
+const todasSeleccionadas = computed(() => plataformasActivas.value.length === plataformasExtractor.length)
+
+const etiquetaPlataformasActivas = computed(() => {
+  if (todasSeleccionadas.value) return 'Todas las plataformas'
+  return plataformasExtractor
+    .filter(p => plataformasActivas.value.includes(p.id))
+    .map(p => p.nombre)
+    .join(' + ')
+})
+
+function seleccionarTodasLasPlataformas() {
+  plataformasActivas.value = plataformasExtractor.map(p => p.id)
+}
+
+function togglePlataforma(platId) {
+  const actual = [...plataformasActivas.value]
+  if (actual.includes(platId)) {
+    if (actual.length > 1) {
+      plataformasActivas.value = actual.filter(id => id !== platId)
+    }
+  } else {
+    plataformasActivas.value = [...actual, platId]
+  }
+}
+
+function limpiarBusqueda() {
+  consultaApi.value = ''
+  resultadosApi.value = []
+}
+
+onBeforeUnmount(() => {
+  limpiarBusqueda()
+})
 
 const sugerenciasBusqueda = [
   'Coldplay',
@@ -640,10 +413,6 @@ function abrirExtractorApi() {
   }
 }
 
-function cambiarPlataformaExtractor(platId) {
-  plataformaActiva.value = platId
-}
-
 function buscarSugerencia(termino) {
   consultaApi.value = termino
 }
@@ -657,26 +426,27 @@ async function ejecutarBusquedaApi() {
   buscandoApi.value = true
   errorMensaje.value = ''
   try {
-    resultadosApi.value = await musicApiService.searchTracksLive(
+    resultadosApi.value = await musicApiService.searchTracksAcrossPlatforms(
       q,
-      plataformaActiva.value
+      plataformasActivas.value
     )
   } catch (err) {
-    errorMensaje.value = 'Error al consultar API: ' + err.message
+    errorMensaje.value = 'Error al consultar plataforma: ' + err.message
   } finally {
     buscandoApi.value = false
   }
 }
 
-// Búsqueda automática instantánea al escribir en el buscador de API
-watch([consultaApi, plataformaActiva], () => {
-  if (apiSearchDebounce) clearTimeout(apiSearchDebounce)
-  apiSearchDebounce = setTimeout(() => {
-    if (mostrarExtractor.value && modoExtractor.value === 'busqueda') {
+watch(
+  [consultaApi, plataformasActivas],
+  () => {
+    if (apiSearchDebounce) clearTimeout(apiSearchDebounce)
+    apiSearchDebounce = setTimeout(() => {
       ejecutarBusquedaApi()
-    }
-  }, 260)
-})
+    }, 260)
+  },
+  { deep: true }
+)
 
 async function extraerCancionIndividual(track) {
   errorMensaje.value = ''
@@ -1100,6 +870,23 @@ onMounted(() => {
   font-size: 11px;
   color: var(--lime);
   font-weight: 700;
+}
+
+.search-clear-x {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cream);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.search-clear-x:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .playlist-select-dest {

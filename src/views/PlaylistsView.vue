@@ -195,6 +195,15 @@
               type="text"
               placeholder="Buscar en la playlist..."
             />
+            <button
+              v-if="busquedaDentroDePlaylist"
+              type="button"
+              class="mini-clear-x"
+              title="Borrar búsqueda"
+              @click="busquedaDentroDePlaylist = ''"
+            >
+              <AppIcon name="close" :size="12" />
+            </button>
           </div>
 
           <CustomSelect
@@ -345,6 +354,15 @@
               placeholder="Escribe para buscar automáticamente en tu catálogo..."
               class="search-input-clean"
             />
+            <button
+              v-if="filtroCatalogoAgregar"
+              type="button"
+              class="mini-clear-x"
+              title="Borrar búsqueda"
+              @click="filtroCatalogoAgregar = ''"
+            >
+              <AppIcon name="close" :size="12" />
+            </button>
           </div>
           <div class="catalog-picker-list">
             <div
@@ -405,10 +423,19 @@
               <input
                 v-model="consultaApiPlaylist"
                 type="text"
-                placeholder="Escribe un artista o canción y los resultados aparecerán automáticamente..."
+                placeholder="Artista, canción, álbum..."
                 class="search-input-clean"
               />
               <span v-if="buscandoEnApi" class="searching-badge">Buscando...</span>
+              <button
+                v-if="consultaApiPlaylist"
+                type="button"
+                class="mini-clear-x"
+                title="Borrar búsqueda"
+                @click="consultaApiPlaylist = ''; resultadosApiPlaylist = []"
+              >
+                <AppIcon name="close" :size="12" />
+              </button>
             </div>
           </div>
 
@@ -543,8 +570,15 @@
                 {{ formatearFechaCorta(item.agregado_en) }}
               </td>
 
-              <td class="col-plays">
-                {{ (item.canciones?.reproducciones || 0).toLocaleString('es-AR') }}
+              <td
+                class="col-plays"
+                :title="
+                  item.canciones?.plataforma_origen === 'spotify'
+                    ? 'Estimación de Spotify basada en popularidad global (Spotify no publica el contador exacto en su API pública)'
+                    : 'Reproducciones reales obtenidas de la plataforma'
+                "
+              >
+                {{ formatearReproducciones(item.canciones) }}
               </td>
 
               <td class="col-duration">
@@ -613,6 +647,15 @@
               type="text"
               placeholder="Buscar playlist..."
             />
+            <button
+              v-if="filtroBusqueda"
+              type="button"
+              class="mini-clear-x"
+              title="Borrar búsqueda"
+              @click="filtroBusqueda = ''"
+            >
+              <AppIcon name="close" :size="12" />
+            </button>
           </div>
 
           <CustomSelect
@@ -888,7 +931,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import FavoritosArtwork from '@/components/FavoritosArtwork.vue'
@@ -1168,9 +1211,25 @@ async function seleccionarYReproducir(pl) {
   reproducirTodaLaPlaylist()
 }
 
+function limpiarTodosLosBuscadoresPlaylist() {
+  filtroBusqueda.value = ''
+  busquedaDentroDePlaylist.value = ''
+  filtroCatalogoAgregar.value = ''
+  consultaApiPlaylist.value = ''
+  resultadosApiPlaylist.value = []
+}
+
+onBeforeUnmount(() => {
+  limpiarTodosLosBuscadoresPlaylist()
+})
+
 function volverATodasLasPlaylists() {
   panelActivoEnPlaylist.value = null
   soloMostrarRepetidas.value = false
+  busquedaDentroDePlaylist.value = ''
+  filtroCatalogoAgregar.value = ''
+  consultaApiPlaylist.value = ''
+  resultadosApiPlaylist.value = []
   router.push({ path: '/playlists' })
 }
 
@@ -1456,6 +1515,21 @@ function formatearDuracion(seg) {
   const min = Math.floor(s / 60)
   const rem = String(s % 60).padStart(2, '0')
   return `${min}:${rem}`
+}
+
+function formatearReproducciones(cancion) {
+  const plays = Number(cancion?.reproducciones) || 0
+  if (plays <= 0) return '—'
+  if (cancion?.plataforma_origen === 'spotify') {
+    if (plays >= 1_000_000) {
+      return `~${Math.round(plays / 1_000_000).toLocaleString('es-AR')} M (est.)`
+    }
+    if (plays >= 1_000) {
+      return `~${Math.round(plays / 1_000).toLocaleString('es-AR')} K (est.)`
+    }
+    return `~${plays.toLocaleString('es-AR')} (est.)`
+  }
+  return plays.toLocaleString('es-AR')
 }
 
 function formatearDuracionTotal(totalSeg) {
@@ -2661,6 +2735,23 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.mini-clear-x {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--cream);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mini-clear-x:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .track-main-cell {

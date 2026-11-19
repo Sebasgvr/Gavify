@@ -1,0 +1,24 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/yt-search"
+  to = "/.netlify/functions/yt-search"
+  status = 200
+
+[[redirects]]
+  from = "/api/extract-playlist"
+  to = "/.netlify/functions/extract-playlist"
+  status = 200
+
+[[redirects]]
+  from = "/api/track-stats"
+  to = "/.netlify/functions/track-stats"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -12,37 +12,26 @@
           </button>
         </div>
 
-        <!-- Selector de Plataforma -->
+        <!-- Selector Multi-Plataforma: elige Todas, 2 o 1 plataforma -->
         <div class="platform-tabs">
+          <button
+            type="button"
+            class="plat-tab"
+            :class="{ active: todasSeleccionadas }"
+            @click="seleccionarTodasLasPlataformas"
+          >
+            <span>Todas</span>
+          </button>
           <button
             v-for="plat in plataformasExtractor"
             :key="plat.id"
+            type="button"
             class="plat-tab"
-            :class="{ active: plataformaActiva === plat.id }"
-            @click="cambiarPlataformaExtractor(plat.id)"
+            :class="{ active: plataformasActivas.includes(plat.id) }"
+            @click="togglePlataforma(plat.id)"
           >
             <AppIcon :name="plat.id" :size="18" />
             <span>{{ plat.nombre }}</span>
-          </button>
-        </div>
-
-        <!-- Sub-modos -->
-        <div class="extractor-mode-bar">
-          <button
-            class="mode-pill"
-            :class="{ active: modoExtractor === 'busqueda' }"
-            @click="modoExtractor = 'busqueda'"
-          >
-            <AppIcon name="search" :size="14" />
-            <span>Buscar canciones en {{ nombrePlataformaActiva }}</span>
-          </button>
-          <button
-            class="mode-pill"
-            :class="{ active: modoExtractor === 'playlists' }"
-            @click="modoExtractor = 'playlists'"
-          >
-            <AppIcon name="playlist" :size="14" />
-            <span>Playlists conectadas ({{ catalogoPlataformaActiva.playlists.length }})</span>
           </button>
         </div>
 
@@ -62,8 +51,8 @@
           </button>
         </div>
 
-        <!-- Modo A: Búsqueda en Vivo -->
-        <div v-if="modoExtractor === 'busqueda'" class="extractor-search-area">
+        <!-- Búsqueda en Vivo -->
+        <div class="extractor-search-area">
           <div class="live-input-box">
             <AppIcon name="search" :size="16" />
             <input
@@ -74,6 +63,15 @@
               @keydown.esc="$emit('close')"
             />
             <span v-if="buscandoApi" class="live-status">Buscando...</span>
+            <button
+              v-if="consultaApi"
+              type="button"
+              class="search-clear-x"
+              title="Borrar búsqueda"
+              @click="limpiarBusqueda"
+            >
+              <AppIcon name="close" :size="13" />
+            </button>
           </div>
 
           <!-- Sugerencias rápidas -->
@@ -91,12 +89,12 @@
           </div>
 
           <div v-if="buscandoApi && !resultadosApi.length" class="empty-state">
-            <p>Buscando automáticamente en {{ nombrePlataformaActiva }}...</p>
+            <p>Buscando en {{ etiquetaPlataformasActivas }}...</p>
           </div>
 
           <div v-else-if="resultadosApi.length" class="api-results-list">
             <div class="api-results-head">
-              <span class="tiny">RESULTADOS EN {{ nombrePlataformaActiva.toUpperCase() }} ({{ resultadosApi.length }})</span>
+              <span class="tiny">RESULTADOS EN {{ etiquetaPlataformasActivas.toUpperCase() }} ({{ resultadosApi.length }})</span>
             </div>
 
             <div class="api-cards-grid">
@@ -110,8 +108,8 @@
                     <MarqueeText :text="item.artista + (item.album ? ' • ' + item.album : '')" class="api-track-artist" />
                   </div>
                   <div class="api-track-badges">
-                    <span :class="['origin-badge', `origin-${item.plataforma_origen || plataformaActiva}`]">
-                      {{ etiquetaPlataforma(item.plataforma_origen || plataformaActiva) }}
+                    <span :class="['origin-badge', `origin-${item.plataforma_origen || 'spotify'}`]">
+                      {{ etiquetaPlataforma(item.plataforma_origen) }}
                     </span>
                     <span class="genre-pill">{{ item.genero }}</span>
                     <span class="tiny">{{ formatearDuracion(item.duracion_segundos) }}</span>
@@ -135,29 +133,6 @@
                     <AppIcon name="plus" :size="16" />
                   </button>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Modo B: Playlists Conectadas -->
-        <div v-else class="extractor-playlists-area">
-          <div class="synced-playlists-grid">
-            <div
-              v-for="pl in catalogoPlataformaActiva.playlists"
-              :key="pl.externalId"
-              class="synced-pl-card"
-            >
-              <div class="synced-pl-head">
-                <div>
-                  <span class="tiny accent">{{ nombrePlataformaActiva.toUpperCase() }} PLAYLIST</span>
-                  <h4>{{ pl.nombre }}</h4>
-                  <p>{{ pl.descripcion }}</p>
-                </div>
-                <button class="primary btn-sm" @click="importarPlaylistCompleta(pl)">
-                  <AppIcon name="bolt" :size="14" />
-                  <span>Importar lista ({{ pl.canciones.length }})</span>
-                </button>
               </div>
             </div>
           </div>
@@ -205,8 +180,7 @@ const plataformasExtractor = [
   { id: 'youtube_music', nombre: 'YouTube Music' },
   { id: 'youtube', nombre: 'YouTube' }
 ]
-const plataformaActiva = ref('spotify')
-const modoExtractor = ref('busqueda')
+const plataformasActivas = ref(['spotify'])
 const consultaApi = ref('')
 const resultadosApi = ref([])
 const buscandoApi = ref(false)
@@ -228,15 +202,40 @@ const sugerenciasBusqueda = [
   'Miley Cyrus'
 ]
 
-const nombrePlataformaActiva = computed(() => {
-  return plataformasExtractor.find(p => p.id === plataformaActiva.value)?.nombre || 'Spotify'
-})
+const todasSeleccionadas = computed(() => plataformasActivas.value.length === plataformasExtractor.length)
 
-const catalogoPlataformaActiva = computed(() => {
-  return musicApiService.getSyncedCatalogByPlatform(plataformaActiva.value)
+const etiquetaPlataformasActivas = computed(() => {
+  if (todasSeleccionadas.value) return 'Todas las plataformas'
+  return plataformasExtractor
+    .filter(p => plataformasActivas.value.includes(p.id))
+    .map(p => p.nombre)
+    .join(' + ')
 })
 
 let debounceTimer = null
+
+function limpiarBusqueda() {
+  consultaApi.value = ''
+  resultadosApi.value = []
+  emit('update:query', '')
+}
+
+function seleccionarTodasLasPlataformas() {
+  plataformasActivas.value = plataformasExtractor.map(p => p.id)
+  if (consultaApi.value.trim()) buscarEnApi()
+}
+
+function togglePlataforma(platId) {
+  const actual = [...plataformasActivas.value]
+  if (actual.includes(platId)) {
+    if (actual.length > 1) {
+      plataformasActivas.value = actual.filter(id => id !== platId)
+    }
+  } else {
+    plataformasActivas.value = [...actual, platId]
+  }
+  if (consultaApi.value.trim()) buscarEnApi()
+}
 
 watch(
   () => props.isOpen,
@@ -245,11 +244,16 @@ watch(
       if (props.initialQuery && props.initialQuery.trim()) {
         consultaApi.value = props.initialQuery.trim()
       }
-      if (!resultadosApi.value.length) {
+      if (consultaApi.value.trim() && !resultadosApi.value.length) {
         buscarEnApi()
       }
       await nextTick()
       inputRef.value?.focus()
+    } else {
+      // Al salir del buscador se borra lo escrito y los resultados
+      limpiarBusqueda()
+      mensaje.value = ''
+      errorMensaje.value = ''
     }
   }
 )
@@ -257,8 +261,8 @@ watch(
 watch(
   () => props.initialQuery,
   val => {
-    if (val && val.trim() && val.trim() !== consultaApi.value.trim()) {
-      consultaApi.value = val.trim()
+    if (typeof val === 'string' && val.trim() !== consultaApi.value.trim()) {
+      consultaApi.value = val
     }
   }
 )
@@ -272,15 +276,8 @@ watch(consultaApi, val => {
   }
   debounceTimer = setTimeout(() => {
     buscarEnApi()
-  }, 320)
+  }, 300)
 })
-
-function cambiarPlataformaExtractor(platId) {
-  plataformaActiva.value = platId
-  if (modoExtractor.value === 'busqueda' && consultaApi.value.trim()) {
-    buscarEnApi()
-  }
-}
 
 function buscarSugerencia(sug) {
   consultaApi.value = sug
@@ -292,7 +289,10 @@ async function buscarEnApi() {
   buscandoApi.value = true
   errorMensaje.value = ''
   try {
-    resultadosApi.value = await musicApiService.searchTracksLive(consultaApi.value, plataformaActiva.value)
+    resultadosApi.value = await musicApiService.searchTracksAcrossPlatforms(
+      consultaApi.value,
+      plataformasActivas.value
+    )
   } catch (err) {
     errorMensaje.value = 'Error al consultar la plataforma: ' + err.message
   } finally {
@@ -473,6 +473,23 @@ function formatearDuracion(seg) {
   font-size: 11px;
   color: var(--lime);
   font-weight: 700;
+}
+
+.search-clear-x {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cream);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.search-clear-x:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .quick-search-chips {

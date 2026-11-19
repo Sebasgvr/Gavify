@@ -69,11 +69,10 @@
             <template v-else>
               <button
                 class="btn-platform btn-spotify btn-icon-flex"
-                :disabled="extrayendo === 'spotify'"
-                @click="extraerCatalogoPlataforma('spotify')"
+                @click="abrirModalVincular('spotify')"
               >
                 <AppIcon name="bolt" :size="14" />
-                <span>{{ extrayendo === 'spotify' ? 'Extrayendo playlists...' : 'Extraer playlists de mi cuenta' }}</span>
+                <span>Extraer playlist de Spotify</span>
               </button>
               <div class="connected-sub-actions">
                 <button class="btn-relink" @click="abrirModalVincular('spotify')">
@@ -122,11 +121,10 @@
             <template v-else>
               <button
                 class="btn-platform btn-ytmusic btn-icon-flex"
-                :disabled="extrayendo === 'youtube_music'"
-                @click="extraerCatalogoPlataforma('youtube_music')"
+                @click="abrirModalVincular('youtube_music')"
               >
                 <AppIcon name="bolt" :size="14" />
-                <span>{{ extrayendo === 'youtube_music' ? 'Extrayendo playlists...' : 'Extraer playlists de mi cuenta' }}</span>
+                <span>Extraer playlist de YT Music</span>
               </button>
               <div class="connected-sub-actions">
                 <button class="btn-relink" @click="abrirModalVincular('youtube_music')">
@@ -175,11 +173,10 @@
             <template v-else>
               <button
                 class="btn-platform btn-youtube btn-icon-flex"
-                :disabled="extrayendo === 'youtube'"
-                @click="extraerCatalogoPlataforma('youtube')"
+                @click="abrirModalVincular('youtube')"
               >
                 <AppIcon name="bolt" :size="14" />
-                <span>{{ extrayendo === 'youtube' ? 'Extrayendo playlists...' : 'Extraer listas de mi cuenta' }}</span>
+                <span>Extraer playlist de YouTube</span>
               </button>
               <div class="connected-sub-actions">
                 <button class="btn-relink" @click="abrirModalVincular('youtube')">
@@ -194,22 +191,33 @@
         </div>
       </div>
 
-      <!-- Extractor Directo por Enlace + Listas de Cuentas Vinculadas -->
+      <!-- Extractor Directo por Enlace + Listas Reales Sincronizadas -->
       <div v-if="hasAnyConnected" class="account-playlists-preview">
         <!-- Barra para pegar enlace real de playlist de Spotify, YT Music o YouTube -->
         <div class="url-extractor-box">
           <div class="url-extractor-head">
             <span class="tiny accent">EXTRACCIÓN DIRECTA DESDE TUS APPS CONECTADAS</span>
-            <h4>¿Tienes el enlace de tu playlist? Pégalo para extraer todas sus canciones</h4>
+            <h4>¿Tienes el enlace de tu playlist? Pégalo para extraer todas sus canciones reales</h4>
           </div>
           <div class="url-extractor-row">
-            <input
-              v-model="urlPlaylistInput"
-              type="url"
-              placeholder="Ej: https://open.spotify.com/playlist/... o https://music.youtube.com/playlist?list=..."
-              class="url-input"
-              @keyup.enter="extraerPorEnlace"
-            />
+            <div class="url-input-wrap">
+              <input
+                v-model="urlPlaylistInput"
+                type="url"
+                placeholder="Ej: https://open.spotify.com/playlist/... o https://music.youtube.com/playlist?list=..."
+                class="url-input"
+                @keyup.enter="extraerPorEnlace"
+              />
+              <button
+                v-if="urlPlaylistInput"
+                type="button"
+                class="input-clear-x"
+                title="Borrar"
+                @click="urlPlaylistInput = ''"
+              >
+                <AppIcon name="close" :size="13" />
+              </button>
+            </div>
             <button
               class="primary btn-sm btn-icon-flex"
               :disabled="!urlPlaylistInput.trim() || extrayendoUrl"
@@ -225,51 +233,44 @@
 
         <div class="preview-header">
           <div>
-            <span class="tiny accent">LISTAS SINCRONIZADAS DE TUS CUENTAS</span>
-            <h3>Playlists disponibles para extraer a tu Gavify</h3>
+            <span class="tiny accent">TUS PLAYLISTS REALES SINCRONIZADAS</span>
+            <h3>Playlists extraídas en tu cuenta ({{ playlistsReales.length }})</h3>
           </div>
-          <button
-            class="primary btn-sm btn-icon-flex"
-            :disabled="extrayendoTodo"
-            @click="extraerTodasLasPlaylists"
-          >
-            <AppIcon name="bolt" :size="14" />
-            <span>{{ extrayendoTodo ? 'Extrayendo todo...' : 'Extraer todas las playlists vinculadas' }}</span>
-          </button>
         </div>
 
-        <div class="playlists-cards-grid">
+        <div v-if="!playlistsReales.length" class="empty-real-playlists">
+          <p>Todavía no extrajiste ninguna playlist real. Pega el enlace público de una playlist de Spotify, YouTube Music o YouTube arriba para importarla con todas sus canciones reales.</p>
+        </div>
+
+        <div v-else class="playlists-cards-grid">
           <div
-            v-for="pl in playlistsDetectadas"
-            :key="pl.externalId"
+            v-for="pl in playlistsReales"
+            :key="pl.id"
             class="pl-detect-card"
           >
-            <img :src="pl.portada_url" :alt="pl.nombre" class="pl-detect-cover" />
+            <img
+              v-if="pl.portada_url"
+              :src="pl.portada_url"
+              :alt="pl.nombre"
+              class="pl-detect-cover"
+            />
+            <div v-else class="pl-detect-cover pl-cover-empty">
+              <AppIcon name="music" :size="20" />
+            </div>
             <div class="pl-detect-info">
               <div class="pl-plat-line">
                 <AppIcon :name="pl.plataforma_origen" :size="14" />
-                <span class="tiny">{{ pl.plataforma_origen === 'youtube_music' ? 'YT Music' : pl.plataforma_origen.toUpperCase() }}</span>
+                <span class="tiny">{{ pl.plataforma_origen === 'youtube_music' ? 'YT Music' : (pl.plataforma_origen || 'Gavify').toUpperCase() }}</span>
               </div>
               <h4>{{ pl.nombre }}</h4>
-              <p>{{ pl.descripcion }}</p>
-              <small>{{ pl.canciones.length }} canciones</small>
+              <p>{{ pl.descripcion || 'Playlist sincronizada' }}</p>
+              <small>{{ pl.total_canciones || 0 }} {{ pl.total_canciones === 1 ? 'canción' : 'canciones' }}</small>
             </div>
             <button
-              class="btn-extract-one"
-              :class="{ done: extraidasIds.has(pl.externalId) }"
-              :disabled="extrayendoId === pl.externalId"
-              @click="extraerUnaPlaylist(pl)"
+              class="btn-extract-one done"
+              @click="router.push({ path: '/playlists', query: { id: pl.id } })"
             >
-              <AppIcon :name="extraidasIds.has(pl.externalId) ? 'check' : 'plus'" :size="14" />
-              <span>
-                {{
-                  extrayendoId === pl.externalId
-                    ? 'Extrayendo...'
-                    : extraidasIds.has(pl.externalId)
-                      ? 'Extraída'
-                      : 'Extraer'
-                }}
-              </span>
+              <span>Abrir</span>
             </button>
           </div>
         </div>
@@ -364,7 +365,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth } from '@/services/auth'
 import { musicApiService } from '@/services/musicApis'
@@ -375,14 +376,26 @@ const router = useRouter()
 const auth = useAuth()
 
 const cargando = ref('')
-const extrayendo = ref('')
-const extrayendoTodo = ref(false)
-const extrayendoId = ref('')
 const extrayendoUrl = ref(false)
 const urlPlaylistInput = ref('')
-const extraidasIds = ref(new Set())
+const playlistsReales = ref([])
 const mensajeExito = ref('')
 const mensajeError = ref('')
+
+async function cargarPlaylistsReales() {
+  try {
+    const todas = await dbService.getPlaylists()
+    playlistsReales.value = todas.filter(
+      p => p.tipo !== 'favoritos' && (p.nombre || '').toLowerCase() !== 'tus me gusta'
+    )
+  } catch {
+    playlistsReales.value = []
+  }
+}
+
+onMounted(() => {
+  cargarPlaylistsReales()
+})
 
 // Modal de vinculación
 const modalPlataforma = ref(null)
@@ -496,6 +509,7 @@ async function confirmarVinculacionCuenta() {
     if (formLink.value.playlistUrl.trim()) {
       const playlistExtraida = await musicApiService.extractPlaylistByUrl(formLink.value.playlistUrl.trim())
       await dbService.extractPlaylistFromApi(playlistExtraida)
+      await cargarPlaylistsReales()
       extraMsg = ` y se extrajo la playlist "${playlistExtraida.nombre}" (${playlistExtraida.canciones.length} canciones)`
     }
 
@@ -521,6 +535,7 @@ async function extraerPorEnlace() {
   try {
     const playlistExtraida = await musicApiService.extractPlaylistByUrl(urlPlaylistInput.value.trim())
     await dbService.extractPlaylistFromApi(playlistExtraida)
+    await cargarPlaylistsReales()
     mensajeExito.value = `✓ Playlist "${playlistExtraida.nombre}" (${playlistExtraida.canciones.length} canciones) extraída y guardada en tus Playlists.`
     urlPlaylistInput.value = ''
   } catch (err) {
@@ -840,15 +855,60 @@ function irAGestorMusica() {
   align-items: center;
 }
 
-.url-input {
+.url-input-wrap {
   flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.url-input {
+  width: 100%;
   background: #0e110e;
   border: 1px solid #313a30;
   color: var(--cream);
-  padding: 11px 14px;
+  padding: 11px 38px 11px 14px;
   border-radius: 999px;
   font-size: 13px;
   outline: none;
+}
+
+.input-clear-x {
+  position: absolute;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cream);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.input-clear-x:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.empty-real-playlists {
+  padding: 18px;
+  border-radius: 12px;
+  background: #181c17;
+  border: 1px dashed #2e362c;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.empty-real-playlists p {
+  margin: 0;
+}
+
+.pl-cover-empty {
+  display: grid;
+  place-items: center;
+  background: #232a22;
+  color: var(--lime);
 }
 
 .url-input:focus {

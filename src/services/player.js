@@ -20,8 +20,49 @@ const KNOWN_SONG_CANDIDATES = {
 }
 
 const SAVED_SONGS_KEY = 'gavify_saved_songs_v1'
+const PLAYER_STATE_KEY = 'gavify_player_state_v1'
 const candidateMemoryCache = new Map()
 const lyricsMemoryCache = new Map()
+
+function loadSavedPlayerState() {
+  try {
+    const raw = localStorage.getItem(PLAYER_STATE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function savePlayerState() {
+  try {
+    if (!currentTrack.value) {
+      localStorage.removeItem(PLAYER_STATE_KEY)
+      return
+    }
+    localStorage.setItem(
+      PLAYER_STATE_KEY,
+      JSON.stringify({
+        currentTrack: currentTrack.value,
+        queue: queue.value.slice(0, 100),
+        currentIndex: currentIndex.value,
+        currentTime: Math.floor(currentTime.value || 0),
+        duration: Number(duration.value) || Number(currentTrack.value?.duracion_segundos) || 215,
+        isShuffle: isShuffle.value,
+        isRepeat: isRepeat.value,
+        volume: volume.value,
+        isMuted: isMuted.value
+      })
+    )
+  } catch {
+    // ignore storage quota
+  }
+}
+
+function clearSavedPlayerState() {
+  try {
+    localStorage.removeItem(PLAYER_STATE_KEY)
+  } catch {}
+}
 
 function loadSavedIds() {
   try {
@@ -36,19 +77,21 @@ function isValidYoutubeId(id) {
   return typeof id === 'string' && /^[a-zA-Z0-9_-]{11}$/.test(id)
 }
 
-const currentTrack = ref(null)
-const queue = ref([])
-const currentIndex = ref(-1)
+const _restoredState = loadSavedPlayerState()
+const currentTrack = ref(_restoredState?.currentTrack || null)
+const queue = ref(Array.isArray(_restoredState?.queue) ? _restoredState.queue : [])
+const currentIndex = ref(typeof _restoredState?.currentIndex === 'number' ? _restoredState.currentIndex : -1)
 const isPlaying = ref(false)
 const isLoadingStream = ref(false)
-const isShuffle = ref(false)
-const isRepeat = ref(false)
-const volume = ref(0.85)
-const isMuted = ref(false)
-const currentTime = ref(0)
-const duration = ref(0)
+const isShuffle = ref(Boolean(_restoredState?.isShuffle))
+const isRepeat = ref(Boolean(_restoredState?.isRepeat))
+const volume = ref(typeof _restoredState?.volume === 'number' ? _restoredState.volume : 0.85)
+const isMuted = ref(Boolean(_restoredState?.isMuted))
+const currentTime = ref(Number(_restoredState?.currentTime) || 0)
+const duration = ref(Number(_restoredState?.duration) || 0)
 const savedTrackIds = ref(loadSavedIds())
 const saveFeedback = ref('')
+let needsStreamReloadOnResume = Boolean(_restoredState?.currentTrack)
 
 // Estado de Ventana de Video (Chiquita vs Expandida ocupando el cuadro de interfaz)
 const showMiniVideo = ref(false)
@@ -587,9 +630,11 @@ async function playTrack(track, trackList = null) {
   }
 
   currentTrack.value = { ...track }
+  needsStreamReloadOnResume = false
   currentTime.value = 0
   duration.value = Number(track.duracion_segundos) || 215
   isLoadingStream.value = true
+  savePlayerState()
 
   // Cargar letras de la canción automáticamente desde la API de letras
   fetchLyricsForTrack(track)
@@ -649,13 +694,24 @@ async function playTrack(track, trackList = null) {
   fallbackToHtml5Preview()
 }
 
-function togglePlay() {
+async function togglePlay() {
   if (!currentTrack.value) return
+  if (needsStreamReloadOnResume) {
+    const resumeAt = Number(currentTime.value) || 0
+    const trackToResume = currentTrack.value
+    needsStreamReloadOnResume = false
+    await playTrack(trackToResume, queue.value)
+    if (resumeAt > 2) {
+      setTimeout(() => seekTo(resumeAt), 700)
+    }
+    return
+  }
   if (activeEngine.value === 'youtube' && ytPlayer) {
     const state = ytPlayer.getPlayerState?.()
     if (state === 1) {
       ytPlayer.pauseVideo()
       isPlaying.value = false
+      savePlayerState()
     } else {
       ytPlayer.playVideo()
       isPlaying.value = true
@@ -669,6 +725,7 @@ function togglePlay() {
     audio.play().catch(() => {})
   } else {
     audio.pause()
+    savePlayerState()
   }
 }
 
@@ -847,6 +904,8 @@ function removeCurrentTrack() {
     queue.value = []
     currentIndex.value = -1
     currentTrack.value = null
+    needsStreamReloadOnResume = false
+    clearSavedPlayerState()
     showMiniVideo.value = false
     isVideoExpanded.value = false
     showLyrics.value = false
@@ -857,6 +916,10 @@ function removeCurrentTrack() {
 function closePlayer() {
   stopAllPlayback()
   currentTrack.value = null
+  queue.value = []
+  currentIndex.value = -1
+  needsStreamReloadOnResume = false
+  clearSavedPlayerState()
   showMiniVideo.value = false
   isVideoExpanded.value = false
   showLyrics.value = false
