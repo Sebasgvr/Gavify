@@ -35,7 +35,7 @@ const routes = [
     path: '/connect',
     name: 'connect',
     component: ConnectView,
-    meta: { requiresAuth: true, title: 'Conectar Cuentas de Streaming' }
+    meta: { requiresAuth: true, title: 'Apps Conectadas' }
   },
   {
     path: '/dashboard',
@@ -53,7 +53,7 @@ const routes = [
         path: '/musica',
         name: 'musica',
         component: MusicaView,
-        meta: { title: 'Catálogo & Extractor de APIs', requiresAuth: true }
+        meta: { title: 'Explorar Música', requiresAuth: true }
       },
       {
         path: '/repeated',

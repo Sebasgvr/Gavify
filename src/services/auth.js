@@ -840,19 +840,26 @@ export function useAuth() {
     }
   }
 
-  async function connectPlatform(platform = 'spotify', externalId = null) {
+  async function connectPlatform(platform = 'spotify', externalId = null, accountMeta = {}) {
     if (!currentUser.value) return
     const updated = { ...currentUser.value }
+    const handleLimpio = (accountMeta.handle || externalId || '').trim()
 
     if (platform === 'spotify') {
       updated.spotifyConnected = true
       updated.spotifyUserId = externalId || updated.spotifyUserId || `spotify_${updated.id.slice(0, 8)}`
+      updated.spotifyHandle = handleLimpio || updated.spotifyHandle || `@${(updated.nombre || 'usuario').toLowerCase().replace(/\s+/g, '_')}`
+      if (accountMeta.playlistUrl) updated.spotifyPlaylistUrl = accountMeta.playlistUrl.trim()
     } else if (platform === 'youtube_music') {
       updated.ytMusicConnected = true
       updated.ytMusicChannelId = externalId || updated.ytMusicChannelId || `ytm_${updated.id.slice(0, 8)}`
+      updated.ytMusicHandle = handleLimpio || updated.ytMusicHandle || `@${(updated.nombre || 'usuario').toLowerCase().replace(/\s+/g, '_')}_ytm`
+      if (accountMeta.playlistUrl) updated.ytMusicPlaylistUrl = accountMeta.playlistUrl.trim()
     } else if (platform === 'youtube') {
       updated.youtubeConnected = true
       updated.youtubeChannelId = externalId || updated.youtubeChannelId || `yt_${updated.id.slice(0, 8)}`
+      updated.youtubeHandle = handleLimpio || updated.youtubeHandle || `@${(updated.nombre || 'usuario').toLowerCase().replace(/\s+/g, '_')}_yt`
+      if (accountMeta.playlistUrl) updated.youtubePlaylistUrl = accountMeta.playlistUrl.trim()
     }
 
     currentUser.value = updated
@@ -873,14 +880,25 @@ export function useAuth() {
 
     if (platform === 'spotify') {
       updated.spotifyConnected = false
+      updated.spotifyHandle = null
     } else if (platform === 'youtube_music') {
       updated.ytMusicConnected = false
+      updated.ytMusicHandle = null
     } else if (platform === 'youtube') {
       updated.youtubeConnected = false
+      updated.youtubeHandle = null
     }
 
     currentUser.value = updated
     localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(updated))
+
+    const actuales = loadUsersDatabase()
+    const idx = actuales.findIndex(u => u.id === updated.id)
+    if (idx !== -1) {
+      actuales[idx] = { ...actuales[idx], ...updated }
+      saveUsersDatabase(actuales)
+      usuariosDb.value = actuales
+    }
   }
 
   async function connectSpotify(externalId = null) {

@@ -6,7 +6,7 @@
         <p class="eyebrow accent">
           CATÁLOGO DE {{ auth.currentUser.value?.organizacion_nombre?.toUpperCase() }}
         </p>
-        <h2>Explorar y Buscar Música en APIs</h2>
+        <h2>Explorar y Buscar Música</h2>
         <p class="subtext">
           Busca canciones en tiempo real eligiendo la plataforma de origen (Spotify, YouTube Music o YouTube), escúchalas completas y agrégalas con el botón +.
         </p>
@@ -82,7 +82,7 @@
             <input
               v-model="consultaApi"
               type="text"
-              :placeholder="`Buscar canción o artista en ${nombrePlataformaActiva}...`"
+              placeholder="Artista, canción, álbum..."
             />
             <span v-if="buscandoApi" class="live-status">Buscando...</span>
           </div>
@@ -113,10 +113,7 @@
 
           <div class="api-cards-grid">
             <div v-for="item in resultadosApi" :key="item.external_id" class="api-track-card">
-              <img v-if="item.portada_url" :src="item.portada_url" :alt="item.titulo" class="api-track-img" />
-              <div v-else class="api-track-img empty">
-                <AppIcon name="music" :size="18" />
-              </div>
+              <VinylThumb :src="item.portada_url" :alt="item.titulo" :size="48" />
               <div class="api-track-info">
                 <div class="api-track-title-wrap">
                   <MarqueeText :text="item.titulo" class="api-track-title" />
@@ -423,6 +420,7 @@
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
+import VinylThumb from '@/components/VinylThumb.vue'
 import CustomSelect from '@/components/CustomSelect.vue'
 import AddToPlaylistModal from '@/components/AddToPlaylistModal.vue'
 import MarqueeText from '@/components/MarqueeText.vue'
@@ -509,7 +507,7 @@ const inputAudio = ref(null)
 const mostrarExtractor = ref(true)
 const plataformaActiva = ref('spotify')
 const modoExtractor = ref('busqueda')
-const consultaApi = ref('Coldplay')
+const consultaApi = ref('')
 const buscandoApi = ref(false)
 const resultadosApi = ref([])
 const playlistDestinoExtraccion = ref('')

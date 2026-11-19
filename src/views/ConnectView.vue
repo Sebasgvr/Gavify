@@ -9,19 +9,19 @@
         <img class="logo-image" src="/GavifyLogo.png" alt="Gavify" />
         <span>GAVIFY</span>
       </div>
-      <span class="tiny">VINCULACIÓN DE CUENTAS MUSICALES</span>
+      <span class="tiny">APPS CONECTADAS</span>
     </div>
 
     <section class="connect-content connect-wide">
       <div class="connect-icon">
         <AppIcon name="link" :size="20" />
       </div>
-      <p class="eyebrow accent">VINCULAR CUENTAS Y EXTRAER PLAYLISTS</p>
+      <p class="eyebrow accent">APPS CONECTADAS &amp; EXTRACCIÓN DE PLAYLISTS</p>
       <h1>Conecta tus cuentas de<br /><em>Spotify, YouTube Music y YouTube.</em></h1>
       <p class="connect-lead">
         Hola <strong>{{ auth.currentUser.value?.nombre || 'Usuario' }}</strong>
         ({{ auth.roleInfo.value?.etiqueta }} en <strong>{{ auth.currentUser.value?.organizacion_nombre }}</strong>).
-        Vincula tus cuentas de streaming para extraer tus playlists y canciones favoritas directamente a Gavify, sin carga manual ni configuraciones técnicas.
+        Vincula tus cuentas reales para extraer tus playlists personales y canciones a tu biblioteca privada de Gavify.
       </p>
 
       <!-- Feedback Messages -->
@@ -32,14 +32,14 @@
         <AppIcon name="alert" :size="16" /> {{ mensajeError }}
       </div>
 
-      <!-- Tarjetas de las 3 Plataformas con Iconos Oficiales -->
+      <!-- Tarjetas de las 3 Apps con Iconos Oficiales -->
       <div class="platforms-grid">
         <!-- 1. SPOTIFY -->
         <div class="platform-card" :class="{ connected: isSpotifyConnected }">
           <div class="platform-top">
             <div class="platform-brand-badge">
               <AppIcon name="spotify" :size="20" />
-              <span class="platform-badge spotify-badge">Cuenta de Spotify</span>
+              <span class="platform-badge spotify-badge">App Spotify</span>
             </div>
             <span class="conn-status" :class="{ active: isSpotifyConnected }">
               {{ isSpotifyConnected ? '● Cuenta vinculada' : '○ Sin vincular' }}
@@ -50,21 +50,21 @@
             <div>
               <h3>Spotify</h3>
               <small v-if="isSpotifyConnected" class="user-handle">
-                @{{ getUsernameHandle('spotify') }}
+                {{ getUsernameHandle('spotify') }}
               </small>
             </div>
           </div>
-          <p>Extrae tus playlists personales, canciones guardadas en "Tus Me Gusta" y tus artistas más escuchados.</p>
-          
+          <p>Vincula tu cuenta de Spotify para extraer tus playlists personales, favoritos y mezclas guardadas.</p>
+
           <div class="platform-actions">
             <button
               v-if="!isSpotifyConnected"
               class="btn-platform btn-spotify btn-icon-flex"
               :disabled="cargando === 'spotify'"
-              @click="conectarPlataforma('spotify')"
+              @click="abrirModalVincular('spotify')"
             >
               <AppIcon name="spotify" :size="16" />
-              <span>{{ cargando === 'spotify' ? 'Vinculando cuenta...' : 'Vincular cuenta de Spotify' }}</span>
+              <span>Vincular cuenta de Spotify</span>
             </button>
             <template v-else>
               <button
@@ -75,9 +75,14 @@
                 <AppIcon name="bolt" :size="14" />
                 <span>{{ extrayendo === 'spotify' ? 'Extrayendo playlists...' : 'Extraer playlists de mi cuenta' }}</span>
               </button>
-              <button class="btn-disconnect" @click="desconectarPlataforma('spotify')">
-                Desvincular cuenta
-              </button>
+              <div class="connected-sub-actions">
+                <button class="btn-relink" @click="abrirModalVincular('spotify')">
+                  Cambiar cuenta / URL
+                </button>
+                <button class="btn-disconnect" @click="desconectarPlataforma('spotify')">
+                  Desvincular
+                </button>
+              </div>
             </template>
           </div>
         </div>
@@ -87,7 +92,7 @@
           <div class="platform-top">
             <div class="platform-brand-badge">
               <AppIcon name="youtube_music" :size="20" />
-              <span class="platform-badge ytmusic-badge">Cuenta de YT Music</span>
+              <span class="platform-badge ytmusic-badge">App YT Music</span>
             </div>
             <span class="conn-status" :class="{ active: isYtMusicConnected }">
               {{ isYtMusicConnected ? '● Cuenta vinculada' : '○ Sin vincular' }}
@@ -98,21 +103,21 @@
             <div>
               <h3>YouTube Music</h3>
               <small v-if="isYtMusicConnected" class="user-handle">
-                @{{ getUsernameHandle('youtube_music') }}
+                {{ getUsernameHandle('youtube_music') }}
               </small>
             </div>
           </div>
-          <p>Importa tu Supermix, canciones que te gustan, mezclas personalizadas y listas creadas en YouTube Music.</p>
-          
+          <p>Conecta tu cuenta de Google / YT Music para importar tu Supermix y tus listas de reproducción.</p>
+
           <div class="platform-actions">
             <button
               v-if="!isYtMusicConnected"
               class="btn-platform btn-ytmusic btn-icon-flex"
               :disabled="cargando === 'youtube_music'"
-              @click="conectarPlataforma('youtube_music')"
+              @click="abrirModalVincular('youtube_music')"
             >
               <AppIcon name="youtube_music" :size="16" />
-              <span>{{ cargando === 'youtube_music' ? 'Vinculando cuenta...' : 'Vincular cuenta de YT Music' }}</span>
+              <span>Vincular cuenta de YT Music</span>
             </button>
             <template v-else>
               <button
@@ -123,9 +128,14 @@
                 <AppIcon name="bolt" :size="14" />
                 <span>{{ extrayendo === 'youtube_music' ? 'Extrayendo playlists...' : 'Extraer playlists de mi cuenta' }}</span>
               </button>
-              <button class="btn-disconnect" @click="desconectarPlataforma('youtube_music')">
-                Desvincular cuenta
-              </button>
+              <div class="connected-sub-actions">
+                <button class="btn-relink" @click="abrirModalVincular('youtube_music')">
+                  Cambiar cuenta / URL
+                </button>
+                <button class="btn-disconnect" @click="desconectarPlataforma('youtube_music')">
+                  Desvincular
+                </button>
+              </div>
             </template>
           </div>
         </div>
@@ -135,7 +145,7 @@
           <div class="platform-top">
             <div class="platform-brand-badge">
               <AppIcon name="youtube" :size="20" />
-              <span class="platform-badge youtube-badge">Cuenta de YouTube</span>
+              <span class="platform-badge youtube-badge">App YouTube</span>
             </div>
             <span class="conn-status" :class="{ active: isYoutubeConnected }">
               {{ isYoutubeConnected ? '● Cuenta vinculada' : '○ Sin vincular' }}
@@ -146,21 +156,21 @@
             <div>
               <h3>YouTube</h3>
               <small v-if="isYoutubeConnected" class="user-handle">
-                @{{ getUsernameHandle('youtube') }}
+                {{ getUsernameHandle('youtube') }}
               </small>
             </div>
           </div>
-          <p>Extrae videoclips, sesiones en vivo (BZRP, Tiny Desk), remixes y listas de reproducción de tu canal.</p>
-          
+          <p>Vincula tu canal de YouTube para extraer sesiones en vivo, videoclips y playlists guardadas.</p>
+
           <div class="platform-actions">
             <button
               v-if="!isYoutubeConnected"
               class="btn-platform btn-youtube btn-icon-flex"
               :disabled="cargando === 'youtube'"
-              @click="conectarPlataforma('youtube')"
+              @click="abrirModalVincular('youtube')"
             >
               <AppIcon name="youtube" :size="16" />
-              <span>{{ cargando === 'youtube' ? 'Vinculando cuenta...' : 'Vincular cuenta de YouTube' }}</span>
+              <span>Vincular cuenta de YouTube</span>
             </button>
             <template v-else>
               <button
@@ -169,21 +179,53 @@
                 @click="extraerCatalogoPlataforma('youtube')"
               >
                 <AppIcon name="bolt" :size="14" />
-                <span>{{ extrayendo === 'youtube' ? 'Extrayendo playlists...' : 'Extraer videos y listas de mi cuenta' }}</span>
+                <span>{{ extrayendo === 'youtube' ? 'Extrayendo playlists...' : 'Extraer listas de mi cuenta' }}</span>
               </button>
-              <button class="btn-disconnect" @click="desconectarPlataforma('youtube')">
-                Desvincular cuenta
-              </button>
+              <div class="connected-sub-actions">
+                <button class="btn-relink" @click="abrirModalVincular('youtube')">
+                  Cambiar cuenta / URL
+                </button>
+                <button class="btn-disconnect" @click="desconectarPlataforma('youtube')">
+                  Desvincular
+                </button>
+              </div>
             </template>
           </div>
         </div>
       </div>
 
-      <!-- Playlists Disponibles para Extraer de Cuentas Vinculadas -->
+      <!-- Extractor Directo por Enlace + Listas de Cuentas Vinculadas -->
       <div v-if="hasAnyConnected" class="account-playlists-preview">
+        <!-- Barra para pegar enlace real de playlist de Spotify, YT Music o YouTube -->
+        <div class="url-extractor-box">
+          <div class="url-extractor-head">
+            <span class="tiny accent">EXTRACCIÓN DIRECTA DESDE TUS APPS CONECTADAS</span>
+            <h4>¿Tienes el enlace de tu playlist? Pégalo para extraer todas sus canciones</h4>
+          </div>
+          <div class="url-extractor-row">
+            <input
+              v-model="urlPlaylistInput"
+              type="url"
+              placeholder="Ej: https://open.spotify.com/playlist/... o https://music.youtube.com/playlist?list=..."
+              class="url-input"
+              @keyup.enter="extraerPorEnlace"
+            />
+            <button
+              class="primary btn-sm btn-icon-flex"
+              :disabled="!urlPlaylistInput.trim() || extrayendoUrl"
+              @click="extraerPorEnlace"
+            >
+              <AppIcon name="bolt" :size="14" />
+              <span>{{ extrayendoUrl ? 'Extrayendo canciones...' : 'Extraer playlist' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="preview-divider"></div>
+
         <div class="preview-header">
           <div>
-            <span class="tiny accent">LISTAS DETECTADAS EN TUS CUENTAS</span>
+            <span class="tiny accent">LISTAS SINCRONIZADAS DE TUS CUENTAS</span>
             <h3>Playlists disponibles para extraer a tu Gavify</h3>
           </div>
           <button
@@ -214,19 +256,31 @@
             </div>
             <button
               class="btn-extract-one"
+              :class="{ done: extraidasIds.has(pl.externalId) }"
               :disabled="extrayendoId === pl.externalId"
               @click="extraerUnaPlaylist(pl)"
             >
-              <AppIcon name="plus" :size="14" />
-              <span>{{ extrayendoId === pl.externalId ? 'Extrayendo...' : 'Extraer' }}</span>
+              <AppIcon :name="extraidasIds.has(pl.externalId) ? 'check' : 'plus'" :size="14" />
+              <span>
+                {{
+                  extrayendoId === pl.externalId
+                    ? 'Extrayendo...'
+                    : extraidasIds.has(pl.externalId)
+                      ? 'Extraída'
+                      : 'Extraer'
+                }}
+              </span>
             </button>
           </div>
         </div>
       </div>
 
       <div class="connect-bottom-btns">
-        <button class="primary" @click="irAlDashboard">
-          Ir al Resumen y Biblioteca
+        <button class="primary" @click="router.push('/playlists')">
+          Ver mis Playlists
+        </button>
+        <button class="outline" @click="irAlDashboard">
+          Ir al Resumen
         </button>
         <button class="outline" @click="irAGestorMusica">
           Abrir Explorador Musical
@@ -234,9 +288,78 @@
       </div>
 
       <small class="privacy">
-        Tus cuentas y canciones se gestionan bajo políticas de aislamiento por organización ({{ auth.currentUser.value?.organizacion_nombre }}).
+        Las playlists extraídas pertenecen exclusivamente a tu cuenta ({{ auth.currentUser.value?.nombre }}).
       </small>
     </section>
+
+    <!-- MODAL INTERACTIVO PARA VINCULAR CUENTA REAL -->
+    <div v-if="modalPlataforma" class="modal-backdrop" @click.self="modalPlataforma = null">
+      <div class="link-modal">
+        <div class="link-modal-head">
+          <div class="link-modal-title-row">
+            <AppIcon :name="modalPlataforma" :size="28" />
+            <div>
+              <span class="tiny accent">VINCULAR APP EXTERNA</span>
+              <h3>Conectar cuenta de {{ nombrePlataformaModal }}</h3>
+            </div>
+          </div>
+          <button class="modal-close-x" @click="modalPlataforma = null">
+            <AppIcon name="close" :size="16" />
+          </button>
+        </div>
+
+        <p class="link-modal-desc">
+          Ingresa tu usuario o correo de <strong>{{ nombrePlataformaModal }}</strong> para autorizar la lectura de tus playlists en Gavify.
+        </p>
+
+        <div class="link-modal-form">
+          <div class="field-group">
+            <label>Usuario, correo o @handle de {{ nombrePlataformaModal }} *</label>
+            <input
+              v-model="formLink.handle"
+              type="text"
+              :placeholder="placeholderHandleModal"
+              @keyup.enter="confirmarVinculacionCuenta"
+            />
+          </div>
+
+          <div class="field-group">
+            <label>Enlace de una playlist tuya para extraer ahora (Opcional)</label>
+            <input
+              v-model="formLink.playlistUrl"
+              type="url"
+              :placeholder="placeholderUrlModal"
+            />
+            <small class="field-hint">
+              Si pegas aquí el enlace público de una playlist de {{ nombrePlataformaModal }}, Gavify importará todas sus canciones automáticamente al vincular.
+            </small>
+          </div>
+
+          <div v-if="errorModal" class="connect-alert error" style="margin-bottom: 10px;">
+            <AppIcon name="alert" :size="15" /> {{ errorModal }}
+          </div>
+
+          <div class="link-modal-btns">
+            <button
+              class="btn-platform btn-icon-flex"
+              :class="claseBotonModal"
+              :disabled="!formLink.handle.trim() || cargando === modalPlataforma"
+              @click="confirmarVinculacionCuenta"
+            >
+              <AppIcon :name="modalPlataforma" :size="16" />
+              <span>
+                {{
+                  cargando === modalPlataforma
+                    ? 'Vinculando cuenta...'
+                    : `Autorizar y vincular ${nombrePlataformaModal}`
+                }}
+              </span>
+            </button>
+            <button class="outline" @click="modalPlataforma = null">Cancelar</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -255,8 +378,19 @@ const cargando = ref('')
 const extrayendo = ref('')
 const extrayendoTodo = ref(false)
 const extrayendoId = ref('')
+const extrayendoUrl = ref(false)
+const urlPlaylistInput = ref('')
+const extraidasIds = ref(new Set())
 const mensajeExito = ref('')
 const mensajeError = ref('')
+
+// Modal de vinculación
+const modalPlataforma = ref(null)
+const errorModal = ref('')
+const formLink = ref({
+  handle: '',
+  playlistUrl: ''
+})
 
 const isSpotifyConnected = computed(() => auth.currentUser.value?.spotifyConnected ?? false)
 const isYtMusicConnected = computed(() => auth.currentUser.value?.ytMusicConnected ?? false)
@@ -266,10 +400,40 @@ const hasAnyConnected = computed(() => {
   return isSpotifyConnected.value || isYtMusicConnected.value || isYoutubeConnected.value
 })
 
+const nombrePlataformaModal = computed(() => {
+  if (modalPlataforma.value === 'spotify') return 'Spotify'
+  if (modalPlataforma.value === 'youtube_music') return 'YouTube Music'
+  if (modalPlataforma.value === 'youtube') return 'YouTube'
+  return ''
+})
+
+const placeholderHandleModal = computed(() => {
+  const email = auth.currentUser.value?.email || 'tu_usuario@correo.com'
+  if (modalPlataforma.value === 'spotify') return `Ej: @seba_music o ${email}`
+  if (modalPlataforma.value === 'youtube_music') return `Ej: ${email} o @canal_ytm`
+  return `Ej: @tu_canal_youtube o ${email}`
+})
+
+const placeholderUrlModal = computed(() => {
+  if (modalPlataforma.value === 'spotify') return 'https://open.spotify.com/playlist/...'
+  if (modalPlataforma.value === 'youtube_music') return 'https://music.youtube.com/playlist?list=...'
+  return 'https://www.youtube.com/playlist?list=...'
+})
+
+const claseBotonModal = computed(() => {
+  if (modalPlataforma.value === 'spotify') return 'btn-spotify'
+  if (modalPlataforma.value === 'youtube_music') return 'btn-ytmusic'
+  return 'btn-youtube'
+})
+
 function getUsernameHandle(platform) {
-  const nombre = auth.currentUser.value?.nombre || 'usuario'
-  const clean = nombre.toLowerCase().replace(/\s+/g, '_')
-  return `${clean}_${platform === 'youtube_music' ? 'ytmusic' : platform}`
+  const u = auth.currentUser.value
+  if (!u) return ''
+  if (platform === 'spotify' && u.spotifyHandle) return u.spotifyHandle
+  if (platform === 'youtube_music' && u.ytMusicHandle) return u.ytMusicHandle
+  if (platform === 'youtube' && u.youtubeHandle) return u.youtubeHandle
+  const clean = (u.nombre || 'usuario').toLowerCase().replace(/\s+/g, '_')
+  return `@${clean}_${platform === 'youtube_music' ? 'ytmusic' : platform}`
 }
 
 const playlistsDetectadas = computed(() => {
@@ -293,20 +457,52 @@ function goBack() {
   router.push('/dashboard')
 }
 
-async function conectarPlataforma(platform) {
+function abrirModalVincular(platform) {
+  errorModal.value = ''
+  const handleActual =
+    platform === 'spotify'
+      ? auth.currentUser.value?.spotifyHandle
+      : platform === 'youtube_music'
+        ? auth.currentUser.value?.ytMusicHandle
+        : auth.currentUser.value?.youtubeHandle
+
+  formLink.value = {
+    handle: handleActual || auth.currentUser.value?.email || `@${(auth.currentUser.value?.nombre || 'usuario').toLowerCase().replace(/\s+/g, '_')}`,
+    playlistUrl: ''
+  }
+  modalPlataforma.value = platform
+}
+
+async function confirmarVinculacionCuenta() {
+  const platform = modalPlataforma.value
+  if (!platform) return
+  if (!formLink.value.handle.trim()) {
+    errorModal.value = 'Ingresa tu usuario, @handle o correo para vincular la cuenta.'
+    return
+  }
+
   mensajeExito.value = ''
   mensajeError.value = ''
+  errorModal.value = ''
   cargando.value = platform
+
   try {
-    await auth.connectPlatform(platform)
-    const nombres = {
-      spotify: 'Spotify',
-      youtube_music: 'YouTube Music',
-      youtube: 'YouTube'
+    await auth.connectPlatform(platform, null, {
+      handle: formLink.value.handle.trim(),
+      playlistUrl: formLink.value.playlistUrl.trim()
+    })
+
+    let extraMsg = ''
+    if (formLink.value.playlistUrl.trim()) {
+      const playlistExtraida = await musicApiService.extractPlaylistByUrl(formLink.value.playlistUrl.trim())
+      await dbService.extractPlaylistFromApi(playlistExtraida)
+      extraMsg = ` y se extrajo la playlist "${playlistExtraida.nombre}" (${playlistExtraida.canciones.length} canciones)`
     }
-    mensajeExito.value = `¡Cuenta de ${nombres[platform]} vinculada exitosamente! Ya puedes extraer tus playlists directamente a tu biblioteca.`
+
+    mensajeExito.value = `¡Cuenta de ${nombrePlataformaModal.value} (${formLink.value.handle.trim()}) vinculada exitosamente${extraMsg}!`
+    modalPlataforma.value = null
   } catch (err) {
-    mensajeError.value = err.message
+    errorModal.value = err.message
   } finally {
     cargando.value = ''
   }
@@ -314,7 +510,24 @@ async function conectarPlataforma(platform) {
 
 async function desconectarPlataforma(platform) {
   await auth.disconnectPlatform(platform)
-  mensajeExito.value = 'Cuenta desvinculada correctamente.'
+  mensajeExito.value = 'App desvinculada correctamente.'
+}
+
+async function extraerPorEnlace() {
+  if (!urlPlaylistInput.value.trim()) return
+  mensajeExito.value = ''
+  mensajeError.value = ''
+  extrayendoUrl.value = true
+  try {
+    const playlistExtraida = await musicApiService.extractPlaylistByUrl(urlPlaylistInput.value.trim())
+    await dbService.extractPlaylistFromApi(playlistExtraida)
+    mensajeExito.value = `✓ Playlist "${playlistExtraida.nombre}" (${playlistExtraida.canciones.length} canciones) extraída y guardada en tus Playlists.`
+    urlPlaylistInput.value = ''
+  } catch (err) {
+    mensajeError.value = err.message
+  } finally {
+    extrayendoUrl.value = false
+  }
 }
 
 async function extraerCatalogoPlataforma(platform) {
@@ -326,6 +539,7 @@ async function extraerCatalogoPlataforma(platform) {
     let totalCanciones = 0
     for (const pl of catalogo.playlists) {
       await dbService.extractPlaylistFromApi(pl)
+      extraidasIds.value.add(pl.externalId)
       totalCanciones += (pl.canciones || []).length
     }
     mensajeExito.value = `✓ Se extrajeron exitosamente ${catalogo.playlists.length} playlist(s) y ${totalCanciones} canciones desde tu cuenta de ${catalogo.nombre}.`
@@ -342,7 +556,8 @@ async function extraerUnaPlaylist(pl) {
   extrayendoId.value = pl.externalId
   try {
     await dbService.extractPlaylistFromApi(pl)
-    mensajeExito.value = `✓ Playlist "${pl.nombre}" (${pl.canciones.length} canciones) extraída e importada correctamente a tu Gavify.`
+    extraidasIds.value.add(pl.externalId)
+    mensajeExito.value = `✓ Playlist "${pl.nombre}" (${pl.canciones.length} canciones) extraída e importada a tus Playlists.`
   } catch (err) {
     mensajeError.value = err.message
   } finally {
@@ -358,9 +573,10 @@ async function extraerTodasLasPlaylists() {
     let total = 0
     for (const pl of playlistsDetectadas.value) {
       await dbService.extractPlaylistFromApi(pl)
+      extraidasIds.value.add(pl.externalId)
       total += (pl.canciones || []).length
     }
-    mensajeExito.value = `✓ Se extrajeron todas las ${playlistsDetectadas.value.length} playlists y ${total} canciones de tus cuentas conectadas.`
+    mensajeExito.value = `✓ Se extrajeron todas las ${playlistsDetectadas.value.length} playlists y ${total} canciones de tus apps conectadas.`
   } catch (err) {
     mensajeError.value = err.message
   } finally {
@@ -380,7 +596,7 @@ function irAGestorMusica() {
 <style scoped>
 .connect-wide {
   max-width: 980px !important;
-  margin-top: 6vh !important;
+  margin-top: 5vh !important;
 }
 
 .connect-lead {
@@ -390,7 +606,7 @@ function irAGestorMusica() {
 
 .connect-alert {
   padding: 12px 16px;
-  border-radius: 6px;
+  border-radius: 8px;
   margin: 0 auto 20px;
   max-width: 720px;
   font-size: 13px;
@@ -500,6 +716,7 @@ function irAGestorMusica() {
   font-size: 11px;
   color: var(--lime);
   font-family: monospace;
+  word-break: break-all;
 }
 
 .platform-card p {
@@ -514,6 +731,12 @@ function irAGestorMusica() {
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
+}
+
+.connected-sub-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .btn-platform {
@@ -535,7 +758,7 @@ function irAGestorMusica() {
   color: #111912;
 }
 
-.btn-spotify:hover {
+.btn-spotify:hover:not(:disabled) {
   filter: brightness(1.1);
 }
 
@@ -544,7 +767,7 @@ function irAGestorMusica() {
   color: #fff;
 }
 
-.btn-ytmusic:hover {
+.btn-ytmusic:hover:not(:disabled) {
   filter: brightness(1.1);
 }
 
@@ -553,8 +776,24 @@ function irAGestorMusica() {
   color: #fff;
 }
 
-.btn-youtube:hover {
+.btn-youtube:hover:not(:disabled) {
   filter: brightness(1.1);
+}
+
+.btn-relink {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid #3c443b;
+  color: var(--cream);
+  font-size: 11px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.btn-relink:hover {
+  border-color: var(--lime);
+  color: var(--lime);
 }
 
 .btn-disconnect {
@@ -562,7 +801,7 @@ function irAGestorMusica() {
   border: 1px solid #3c443b;
   color: var(--muted);
   font-size: 11px;
-  padding: 7px;
+  padding: 7px 10px;
   border-radius: 999px;
   cursor: pointer;
   transition: 0.2s;
@@ -573,7 +812,7 @@ function irAGestorMusica() {
   border-color: var(--red);
 }
 
-/* Sección de Playlists Detectadas */
+/* Sección de Extractor URL + Playlists Detectadas */
 .account-playlists-preview {
   margin-top: 32px;
   padding: 24px;
@@ -583,11 +822,50 @@ function irAGestorMusica() {
   text-align: left;
 }
 
+.url-extractor-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.url-extractor-head h4 {
+  margin: 4px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.url-extractor-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.url-input {
+  flex: 1;
+  background: #0e110e;
+  border: 1px solid #313a30;
+  color: var(--cream);
+  padding: 11px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  outline: none;
+}
+
+.url-input:focus {
+  border-color: var(--lime);
+}
+
+.preview-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 22px 0;
+}
+
 .preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 18px;
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -600,7 +878,7 @@ function irAGestorMusica() {
 .playlists-cards-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  gap: 14px;
 }
 
 .pl-detect-card {
@@ -675,7 +953,13 @@ function irAGestorMusica() {
   transition: 0.2s;
 }
 
-.btn-extract-one:hover {
+.btn-extract-one.done {
+  background: rgba(184, 223, 109, 0.16);
+  color: var(--lime);
+  border: 1px solid rgba(184, 223, 109, 0.4);
+}
+
+.btn-extract-one:hover:not(:disabled) {
   filter: brightness(1.1);
   transform: scale(1.03);
 }
@@ -690,11 +974,122 @@ function irAGestorMusica() {
   justify-content: center;
   gap: 14px;
   margin-top: 28px;
+  flex-wrap: wrap;
 }
 
 .btn-sm {
-  padding: 8px 14px;
+  padding: 10px 16px;
+  font-size: 12px;
+}
+
+/* Modal de Vinculación de Cuenta */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  z-index: 900;
+  padding: 20px;
+}
+
+.link-modal {
+  width: 100%;
+  max-width: 480px;
+  background: #171b16;
+  border: 1px solid #2e362c;
+  border-radius: 20px;
+  padding: 24px;
+  text-align: left;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.link-modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.link-modal-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.link-modal-title-row h3 {
+  margin: 2px 0 0;
+  font-size: 18px;
+}
+
+.modal-close-x {
+  background: #232922;
+  border: 1px solid #343d33;
+  color: var(--muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.link-modal-desc {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 14px 0 18px;
+  line-height: 1.5;
+}
+
+.link-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field-group label {
   font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cream);
+  font-weight: 700;
+}
+
+.field-group input {
+  background: #0e110e;
+  border: 1px solid #313a30;
+  color: var(--cream);
+  padding: 11px 13px;
+  border-radius: 10px;
+  font-size: 13px;
+  outline: none;
+}
+
+.field-group input:focus {
+  border-color: var(--lime);
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.link-modal-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.link-modal-btns .btn-platform {
+  flex: 1;
 }
 
 @media (max-width: 860px) {
@@ -703,6 +1098,10 @@ function irAGestorMusica() {
   }
   .playlists-cards-grid {
     grid-template-columns: 1fr;
+  }
+  .url-extractor-row {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 </style>

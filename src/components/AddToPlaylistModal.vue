@@ -111,8 +111,14 @@
               @click="toggleCancionEnPlaylist(pl)"
             >
               <div class="pl-row-left">
+                <div
+                  v-if="pl.tipo === 'favoritos' || pl.nombre?.toLowerCase().trim() === 'tus me gusta'"
+                  class="pl-row-thumb fav-modal-thumb"
+                >
+                  <FavoritosArtwork size="thumb" />
+                </div>
                 <img
-                  v-if="pl.portada_url"
+                  v-else-if="pl.portada_url"
                   :src="pl.portada_url"
                   :alt="pl.nombre"
                   class="pl-row-thumb"
@@ -167,6 +173,7 @@ import { ref, watch, onMounted } from 'vue'
 import { dbService } from '../services/db'
 import { useAuth } from '../services/auth'
 import AppIcon from './AppIcon.vue'
+import FavoritosArtwork from './FavoritosArtwork.vue'
 import MarqueeText from './MarqueeText.vue'
 
 const props = defineProps({

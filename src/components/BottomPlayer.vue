@@ -77,19 +77,14 @@
           <span>{{ player.saveFeedback.value }}</span>
         </div>
 
-        <!-- COLUMNA IZQUIERDA: Carátula, Título, Artista, Guardar y Quitar -->
+        <!-- COLUMNA IZQUIERDA: Carátula en Disco de Vinilo, Título, Artista, Guardar y Quitar -->
         <div class="player-left">
-          <div class="player-artwork-box">
-            <img
-              v-if="player.currentTrack.value.portada_url"
-              :src="player.currentTrack.value.portada_url"
-              :alt="player.currentTrack.value.titulo"
-              class="player-artwork-img"
-            />
-            <div v-else class="player-artwork-fallback">
-              <AppIcon name="music" :size="20" />
-            </div>
-          </div>
+          <VinylThumb
+            :src="player.currentTrack.value.portada_url"
+            :alt="player.currentTrack.value.titulo"
+            :size="56"
+            :spinning="player.isPlaying.value"
+          />
 
           <div class="player-track-meta">
             <div class="player-track-title-wrap">
@@ -248,6 +243,7 @@
 import { computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import MarqueeText from '@/components/MarqueeText.vue'
+import VinylThumb from '@/components/VinylThumb.vue'
 import { usePlayer } from '@/services/player'
 import { dbService } from '@/services/db'
 import { useAuth } from '@/services/auth'
@@ -536,14 +532,52 @@ function etiquetaPlataforma(plat) {
   min-width: 0;
 }
 
-.player-artwork-box {
+.player-artwork-box.player-vinyl {
   width: 56px;
   height: 56px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #1d231d;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle, #30362f 0 1.5px, #232823 2.5px 5px);
+  box-shadow: 0 0 0 1px #596156, 0 6px 16px rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+  position: relative;
+}
+
+.player-artwork-box.player-vinyl.is-spinning {
+  animation: player-vinyl-spin 7s linear infinite;
+}
+
+@keyframes player-vinyl-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.player-vinyl-center {
+  width: 31px;
+  height: 31px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #161916;
+  background: #c8a14d;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.player-vinyl-center::after {
+  content: '';
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #141714;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  z-index: 2;
 }
 
 .player-artwork-img {
@@ -558,7 +592,7 @@ function etiquetaPlataforma(plat) {
   height: 100%;
   display: grid;
   place-items: center;
-  color: var(--lime);
+  color: #161916;
 }
 
 .player-track-meta {

@@ -128,14 +128,12 @@
             @click="player.playTrack(song, topCanciones)"
           >
             <span>{{ String(index + 1).padStart(2, '0') }}</span>
-            <img
-              v-if="song.portada_url"
+            <VinylThumb
               :src="song.portada_url"
               :alt="song.titulo"
-              class="art"
-              style="object-fit: cover; border-radius: 10px;"
+              :size="42"
+              :spinning="player.currentTrack.value?.id === song.id && player.isPlaying.value"
             />
-            <span v-else class="art" style="background: #2b342a; border-radius: 10px;"></span>
             <span class="song-info">
               <strong>{{ song.titulo }}</strong>
               <small>{{ song.artista }} • {{ etiquetaPlataforma(song.plataforma_origen) }}</small>
@@ -173,6 +171,7 @@ import { useAuth } from '@/services/auth'
 import { dbService } from '@/services/db'
 import { usePlayer } from '@/services/player'
 import AppIcon from '@/components/AppIcon.vue'
+import VinylThumb from '@/components/VinylThumb.vue'
 
 const router = useRouter()
 const auth = useAuth()

@@ -106,7 +106,7 @@
               <th>Usuario</th>
               <th>Rol en el Sistema</th>
               <th>Plan Asignado</th>
-              <th>APIs Conectadas</th>
+              <th>Apps Conectadas</th>
               <th style="text-align: right;">Acciones</th>
             </tr>
           </thead>

@@ -263,6 +263,22 @@
       <line x1="3" y1="21" x2="10" y2="14" />
     </template>
 
+    <!-- Fire / Flame -->
+    <template v-else-if="name === 'fire' || name === 'flame'">
+      <path
+        d="M12 2c.7 3.2-1.1 5.1-2.6 6.8C8 10.3 7 11.7 7 13.8A5 5 0 0 0 12 19a5 5 0 0 0 5-5c0-2.8-1.5-4.9-3-6.7-.4 1.6-1.3 2.5-2.1 3.1.2-2.7.5-5.6.1-8.4z"
+        fill="currentColor"
+        stroke="none"
+      />
+    </template>
+
+    <!-- Download / Export -->
+    <template v-else-if="name === 'download' || name === 'export'">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </template>
+
     <!-- Disc / Album -->
     <template v-else>
       <circle cx="12" cy="12" r="10" />

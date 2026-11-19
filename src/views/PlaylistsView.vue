@@ -34,8 +34,12 @@
       <!-- Cabecera Hero estilo Spotify / YouTube Music -->
       <header class="playlist-hero">
         <div class="hero-cover-box" @click="reproducirTodaLaPlaylist">
+          <FavoritosArtwork
+            v-if="esPlaylistFavoritos(playlistActual)"
+            size="hero"
+          />
           <img
-            v-if="playlistActual.portada_url"
+            v-else-if="playlistActual.portada_url"
             :src="playlistActual.portada_url"
             :alt="playlistActual.nombre"
             class="hero-single-cover"
@@ -60,6 +64,17 @@
           <div v-else class="hero-empty-cover">
             <AppIcon name="music" :size="54" />
           </div>
+
+          <button
+            v-if="auth.canManagePlaylists.value && !esPlaylistFavoritos(playlistActual)"
+            type="button"
+            class="hero-cover-edit-overlay"
+            title="Cambiar imagen de la playlist"
+            @click.stop="editarPlaylist(playlistActual)"
+          >
+            <AppIcon name="edit" :size="18" />
+            <span>Cambiar imagen</span>
+          </button>
         </div>
 
         <div class="hero-info">
@@ -140,6 +155,16 @@
               <AppIcon name="repeat" :size="15" />
               <span>Canciones repetidas</span>
               <span class="pill-counter">{{ gruposRepetidosEnMismaPlaylist.length }}</span>
+            </button>
+
+            <button
+              v-if="cancionesEnPlaylist.length"
+              class="action-pill"
+              title="Exportar todas las canciones de esta playlist (CSV)"
+              @click="exportarTodasLasCanciones"
+            >
+              <AppIcon name="download" :size="15" />
+              <span>Exportar todas ({{ cancionesEnPlaylist.length }})</span>
             </button>
 
             <button
@@ -328,15 +353,11 @@
               class="catalog-picker-item"
             >
               <div class="picker-left">
-                <img
-                  v-if="cancion.portada_url"
+                <VinylThumb
                   :src="cancion.portada_url"
                   :alt="cancion.titulo"
-                  class="rep-thumb"
+                  :size="40"
                 />
-                <div v-else class="rep-thumb rep-thumb-empty">
-                  <AppIcon name="music" :size="16" />
-                </div>
                 <div class="picker-track-text-wrap">
                   <div class="picker-track-title-wrap">
                     <MarqueeText :text="cancion.titulo" class="picker-track-title" />
@@ -398,15 +419,11 @@
               class="catalog-picker-item"
             >
               <div class="picker-left">
-                <img
-                  v-if="track.portada_url"
+                <VinylThumb
                   :src="track.portada_url"
                   :alt="track.titulo"
-                  class="rep-thumb"
+                  :size="40"
                 />
-                <div v-else class="rep-thumb rep-thumb-empty">
-                  <AppIcon name="music" :size="16" />
-                </div>
                 <div class="picker-track-text-wrap">
                   <div class="picker-track-title-wrap">
                     <MarqueeText :text="track.titulo" class="picker-track-title" />
@@ -460,9 +477,9 @@
           <thead>
             <tr>
               <th class="col-num">#</th>
-              <th class="col-title">Título</th>
-              <th class="col-album">Álbum</th>
-              <th class="col-date">Fecha en que se agregó</th>
+              <th class="col-title">Título - Artista - Plataforma</th>
+              <th class="col-date">Fecha</th>
+              <th class="col-plays">Reproducciones</th>
               <th class="col-duration" title="Duración">
                 <AppIcon name="clock" :size="15" />
               </th>
@@ -478,32 +495,20 @@
                 'is-playing': player.currentTrack.value?.id === item.canciones?.id,
                 'is-repeated-row': item.repetida_en_misma_lista
               }"
-              @dblclick="reproducirCancionDeLista(item.canciones)"
+              @click="reproducirCancionDeLista(item.canciones)"
             >
               <td class="col-num">
-                <button
-                  class="row-play-trigger"
-                  title="Reproducir canción entera"
-                  @click="reproducirCancionDeLista(item.canciones)"
-                >
-                  <span class="num-text">{{ item.orden_numero || idx + 1 }}</span>
-                  <span class="play-icon-hover">
-                    <AppIcon name="play" :size="14" />
-                  </span>
-                </button>
+                <span class="num-text">{{ item.orden_numero || idx + 1 }}</span>
               </td>
 
               <td class="col-title">
                 <div class="track-main-cell">
-                  <img
-                    v-if="item.canciones?.portada_url"
-                    :src="item.canciones.portada_url"
+                  <VinylThumb
+                    :src="item.canciones?.portada_url"
                     :alt="item.canciones?.titulo"
-                    class="track-cover-sm"
+                    :size="44"
+                    :spinning="player.currentTrack.value?.id === item.canciones?.id && player.isPlaying.value"
                   />
-                  <div v-else class="track-cover-sm track-cover-fallback">
-                    <AppIcon name="music" :size="16" />
-                  </div>
 
                   <div class="track-title-stack">
                     <div class="track-name-line">
@@ -522,23 +527,24 @@
                       </span>
                     </div>
                     <div class="track-artist-line">
-                      <span class="platform-mini-tag">
-                        {{ etiquetaPlataforma(item.canciones?.plataforma_origen) }}
-                      </span>
                       <div class="track-artist-marquee-wrap">
                         <MarqueeText :text="item.canciones?.artista" class="artist-sub" />
                       </div>
+                      <span class="artist-sep">•</span>
+                      <span class="platform-mini-tag">
+                        {{ etiquetaPlataforma(item.canciones?.plataforma_origen) }}
+                      </span>
                     </div>
                   </div>
                 </div>
               </td>
 
-              <td class="col-album">
-                {{ item.canciones?.album || 'Single' }}
-              </td>
-
               <td class="col-date">
                 {{ formatearFechaCorta(item.agregado_en) }}
+              </td>
+
+              <td class="col-plays">
+                {{ (item.canciones?.reproducciones || 0).toLocaleString('es-AR') }}
               </td>
 
               <td class="col-duration">
@@ -550,7 +556,7 @@
                   v-if="auth.canManagePlaylists.value"
                   class="row-remove-btn"
                   :title="item.repetida_en_misma_lista ? 'Sacar esta copia repetida de la playlist' : 'Quitar de la playlist'"
-                  @click="quitarCancionDePlaylist(item.id)"
+                  @click.stop="quitarCancionDePlaylist(item.id)"
                 >
                   <AppIcon name="trash" :size="15" />
                 </button>
@@ -562,7 +568,7 @@
     </div>
 
     <!-- =================================================================== -->
-    <!-- VISTA 2: TODAS LAS PLAYLISTS (CUADRADOS 4 POR FILA RESPONSIVE)      -->
+    <!-- VISTA 2: TODAS LAS PLAYLISTS (CUADRADOS 6 POR FILA RESPONSIVE)      -->
     <!-- =================================================================== -->
     <div v-else class="all-playlists-view">
       <!-- Barra de filtros estilo YouTube Music / Spotify -->
@@ -634,7 +640,7 @@
         </div>
       </div>
 
-      <!-- Grid de Tarjetas Cuadradas: 4 por fila en escritorio, adaptable por resolución -->
+      <!-- Grid de Tarjetas Cuadradas: 6 por fila en escritorio, adaptable por resolución -->
       <div v-if="!playlistsFiltradasYOrdenadas.length" class="empty-library-box">
         <p>No se encontraron playlists con el filtro actual.</p>
       </div>
@@ -646,10 +652,14 @@
           class="square-playlist-card"
           @click="seleccionarPlaylist(pl)"
         >
-          <!-- Portada Cuadrada 1:1 (Collage 2x2 o Imagen) -->
+          <!-- Portada Cuadrada 1:1 (Favoritos Artwork / Collage 2x2 / Imagen) -->
           <div class="square-artwork-wrapper">
+            <FavoritosArtwork
+              v-if="esPlaylistFavoritos(pl)"
+              size="card"
+            />
             <img
-              v-if="pl.portada_url"
+              v-else-if="pl.portada_url"
               :src="pl.portada_url"
               :alt="pl.nombre"
               class="square-single-img"
@@ -765,6 +775,47 @@
           </div>
 
           <div class="form-group">
+            <label>Imagen de portada de la playlist</label>
+            <div class="cover-editor-row">
+              <div class="cover-editor-preview">
+                <img v-if="portadaUrlModal" :src="portadaUrlModal" alt="Vista previa" />
+                <AppIcon v-else name="music" :size="24" />
+              </div>
+              <div class="cover-editor-controls">
+                <input
+                  v-model="portadaUrlModal"
+                  type="url"
+                  placeholder="Pega una URL de imagen o sube un archivo..."
+                />
+                <div class="cover-editor-btns">
+                  <input
+                    ref="inputPortadaPlaylist"
+                    type="file"
+                    accept="image/*"
+                    style="display: none;"
+                    @change="onSeleccionarImagenPlaylist"
+                  />
+                  <button
+                    type="button"
+                    class="outline btn-sm"
+                    @click="inputPortadaPlaylist?.click()"
+                  >
+                    Subir imagen
+                  </button>
+                  <button
+                    v-if="portadaUrlModal"
+                    type="button"
+                    class="outline btn-sm"
+                    @click="portadaUrlModal = ''"
+                  >
+                    Quitar imagen
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
             <label>Descripción</label>
             <textarea
               v-model="descripcion"
@@ -840,6 +891,8 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+import FavoritosArtwork from '@/components/FavoritosArtwork.vue'
+import VinylThumb from '@/components/VinylThumb.vue'
 import CustomSelect from '@/components/CustomSelect.vue'
 import MarqueeText from '@/components/MarqueeText.vue'
 import { useAuth } from '@/services/auth'
@@ -864,6 +917,8 @@ const errorMensaje = ref('')
 const mostrarModal = ref(false)
 const mostrarModalApi = ref(false)
 const editandoId = ref(null)
+const portadaUrlModal = ref('')
+const inputPortadaPlaylist = ref(null)
 
 // Filtros en vista general de Todas las Playlists
 const filtroBusqueda = ref('')
@@ -1069,8 +1124,32 @@ async function cargarCancionesDePlaylistActiva(playlistId) {
   try {
     dbService.markPlaylistUsed(playlistId)
     cancionesEnPlaylist.value = await dbService.getCancionesDePlaylist(playlistId)
+    enriquecerReproduccionesReales(cancionesEnPlaylist.value)
   } catch (err) {
     errorMensaje.value = err.message
+  }
+}
+
+async function enriquecerReproduccionesReales(items) {
+  const pendientes = (items || []).filter(
+    it => it.canciones && (Number(it.canciones.reproducciones) || 0) < 1000
+  )
+  if (!pendientes.length) return
+
+  // Resolver por lotes en segundo plano según la plataforma de cada tema
+  const BATCH = 6
+  for (let i = 0; i < pendientes.length; i += BATCH) {
+    const slice = pendientes.slice(i, i + BATCH)
+    await Promise.all(
+      slice.map(async it => {
+        const song = it.canciones
+        const plays = await musicApiService.fetchRealTrackPlays(song, song.plataforma_origen)
+        if (plays > 0) {
+          song.reproducciones = plays
+          await dbService.updateCancionPlays(song.id, plays)
+        }
+      })
+    )
   }
 }
 
@@ -1277,6 +1356,22 @@ function cerrarModal() {
   limpiarFormulario()
 }
 
+function onSeleccionarImagenPlaylist(event) {
+  const file = event.target?.files?.[0]
+  if (!file) return
+  if (file.size > 2 * 1024 * 1024) {
+    errorMensaje.value = 'La imagen supera los 2 MB. Elige una imagen más liviana.'
+    return
+  }
+  const reader = new FileReader()
+  reader.onload = () => {
+    if (typeof reader.result === 'string') {
+      portadaUrlModal.value = reader.result
+    }
+  }
+  reader.readAsDataURL(file)
+}
+
 async function guardarPlaylist() {
   errorMensaje.value = ''
   mensaje.value = ''
@@ -1286,7 +1381,8 @@ async function guardarPlaylist() {
     const payload = {
       nombre: nombre.value,
       descripcion: descripcion.value,
-      es_publica: esPublica.value
+      es_publica: esPublica.value,
+      portada_url: portadaUrlModal.value.trim() || null
     }
 
     if (editandoId.value) {
@@ -1313,6 +1409,7 @@ function editarPlaylist(pl) {
   nombre.value = pl.nombre
   descripcion.value = pl.descripcion || ''
   esPublica.value = pl.es_publica ?? false
+  portadaUrlModal.value = pl.portada_url || ''
   mostrarModal.value = true
 }
 
@@ -1341,6 +1438,7 @@ function limpiarFormulario() {
   descripcion.value = ''
   esPublica.value = false
   editandoId.value = null
+  portadaUrlModal.value = ''
 }
 
 function obtenerIniciales(texto) {
@@ -1384,6 +1482,11 @@ function formatearFechaCorta(iso) {
   }
 }
 
+function esPlaylistFavoritos(pl) {
+  if (!pl) return false
+  return pl.tipo === 'favoritos' || (pl.nombre || '').toLowerCase().trim() === 'tus me gusta'
+}
+
 function etiquetaPlataforma(plat) {
   const map = {
     spotify: 'Spotify',
@@ -1392,6 +1495,53 @@ function etiquetaPlataforma(plat) {
     gavify: 'Gavify'
   }
   return map[plat] || 'Gavify'
+}
+
+function exportarTodasLasCanciones() {
+  if (!playlistActual.value || !cancionesEnPlaylist.value.length) return
+  const escapeCsv = val => `"${String(val ?? '').replace(/"/g, '""')}"`
+  const encabezados = [
+    '#',
+    'Título',
+    'Artista',
+    'Álbum',
+    'Género',
+    'Duración',
+    'Plataforma',
+    'Portada URL',
+    'Spotify URI',
+    'YouTube Video ID'
+  ]
+  const filas = cancionesEnPlaylist.value.map((item, idx) => {
+    const c = item.canciones || {}
+    return [
+      idx + 1,
+      escapeCsv(c.titulo || ''),
+      escapeCsv(c.artista || ''),
+      escapeCsv(c.album || ''),
+      escapeCsv(c.genero || ''),
+      escapeCsv(formatearDuracion(c.duracion_segundos)),
+      escapeCsv(etiquetaPlataforma(c.plataforma_origen)),
+      escapeCsv(c.portada_url || ''),
+      escapeCsv(c.spotify_track_id || ''),
+      escapeCsv(c.youtube_video_id || '')
+    ].join(',')
+  })
+
+  const csvContent = '\uFEFF' + [encabezados.join(','), ...filas].join('\n')
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  const safeName = (playlistActual.value.nombre || 'playlist')
+    .toLowerCase()
+    .replace(/[^a-z0-9-_]+/gi, '_')
+  link.href = url
+  link.setAttribute('download', `${safeName}_canciones.csv`)
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+  mensaje.value = `✓ Se exportaron todas las ${cancionesEnPlaylist.value.length} canciones de "${playlistActual.value.nombre}".`
 }
 
 watch(
@@ -1583,24 +1733,37 @@ onMounted(() => {
 /* GRID DE 4 POR FILA EN ESCRITORIO Y RESPONSIVE SEGÚN RESOLUCIÓN */
 .square-playlists-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 16px;
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 1460px) {
   .square-playlists-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  .square-playlists-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 960px) {
   .square-playlists-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 15px;
   }
 }
 
-@media (max-width: 540px) {
+@media (max-width: 680px) {
+  .square-playlists-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (max-width: 440px) {
   .square-playlists-grid {
     grid-template-columns: 1fr;
   }
@@ -1609,13 +1772,13 @@ onMounted(() => {
 .square-playlist-card {
   background: #151915;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 18px;
-  padding: 15px;
+  border-radius: 14px;
+  padding: 12px;
   cursor: pointer;
   transition: background 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
   display: flex;
   flex-direction: column;
-  gap: 13px;
+  gap: 10px;
 }
 
 .square-playlist-card:hover {
@@ -1684,10 +1847,10 @@ onMounted(() => {
 
 .hover-play-fab {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
-  width: 48px;
-  height: 48px;
+  right: 10px;
+  bottom: 10px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: #1ed760;
   color: #0b0d0b;
@@ -1713,13 +1876,13 @@ onMounted(() => {
 .square-card-info {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   min-width: 0;
 }
 
 .square-card-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #ffffff;
   white-space: nowrap;
@@ -1729,7 +1892,7 @@ onMounted(() => {
 
 .square-card-sub {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: #9aa099;
   white-space: nowrap;
   overflow: hidden;
@@ -1777,7 +1940,7 @@ onMounted(() => {
 
 .playlist-hero {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 28px;
   padding: 28px;
   border-radius: 20px;
@@ -1786,6 +1949,7 @@ onMounted(() => {
 }
 
 .hero-cover-box {
+  position: relative;
   width: 210px;
   height: 210px;
   border-radius: 16px;
@@ -1794,6 +1958,32 @@ onMounted(() => {
   background: #1a201a;
   box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
   cursor: pointer;
+}
+
+.hero-cover-edit-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px !important;
+  background: rgba(10, 14, 10, 0.68);
+  backdrop-filter: blur(4px);
+  border: 0;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  cursor: pointer;
+}
+
+.hero-cover-box:hover .hero-cover-edit-overlay {
+  opacity: 1;
 }
 
 .hero-single-cover {
@@ -2378,16 +2568,18 @@ onMounted(() => {
   text-align: center;
 }
 
-.col-album {
-  width: 26%;
+.col-date {
+  width: 170px;
 }
 
-.col-date {
-  width: 18%;
+.col-plays {
+  width: 130px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .col-duration {
-  width: 70px;
+  width: 80px;
   text-align: right;
 }
 
@@ -2399,6 +2591,7 @@ onMounted(() => {
 .track-row {
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   transition: background 0.12s ease;
+  cursor: pointer;
 }
 
 .track-row:hover {
@@ -2420,28 +2613,54 @@ onMounted(() => {
   color: #b3b9b2;
 }
 
-.row-play-trigger {
-  background: transparent;
-  border: 0;
+.num-text {
   color: #9ca39b;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: inline-grid;
+  font-variant-numeric: tabular-nums;
+}
+
+.artist-sep {
+  color: #7d857c;
+  font-size: 11px;
+}
+
+.cover-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.cover-editor-preview {
+  width: 68px;
+  height: 68px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1a201a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
   place-items: center;
+  color: var(--lime);
+  flex-shrink: 0;
 }
 
-.play-icon-hover {
-  display: none;
-  color: #ffffff;
+.cover-editor-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
-.track-row:hover .num-text {
-  display: none;
+.cover-editor-controls {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.track-row:hover .play-icon-hover {
-  display: inline-flex;
+.cover-editor-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .track-main-cell {

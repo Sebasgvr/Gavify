@@ -42,7 +42,7 @@
           :class="{ active: route.path === '/connect' }"
         >
           <span class="nav-icon"><AppIcon name="link" :size="18" /></span>
-          <span class="nav-text">Conectar Cuentas</span>
+          <span class="nav-text">Apps Conectadas</span>
         </RouterLink>
 
         <RouterLink
@@ -74,14 +74,14 @@
         </div>
 
         <div class="recent-list">
-          <!-- Pinned: Tus me gusta (Favoritos estilo Spotify) -->
+          <!-- Pinned: Tus me gusta (Diseño Aurora exclusivo de Gavify) -->
           <button
             class="recent-pl-item fav-pinned-item"
             :class="{ active: route.path === '/playlists' && playlistFavoritos && route.query.id === playlistFavoritos.id }"
             @click="abrirFavoritos"
           >
-            <div class="recent-pl-thumb fav-heart-thumb">
-              <AppIcon name="heart-filled" :size="15" />
+            <div class="recent-pl-thumb fav-art-thumb">
+              <FavoritosArtwork size="thumb" />
             </div>
             <div class="recent-pl-meta">
               <strong class="pl-name">Tus me gusta</strong>
@@ -137,7 +137,33 @@
           <h1>{{ pageTitle }}</h1>
         </div>
 
-        <button class="mobile-logo" @click="router.push('/dashboard')">G.</button>
+        <!-- BUSCADOR CENTRAL DE CANCIONES (ABRE EL EXPLORADOR MULTI-PLATAFORMA) -->
+        <div class="topbar-search-wrap">
+          <div
+            class="topbar-search-box"
+            :class="{ active: showGlobalSearch }"
+            @click="abrirBuscadorGlobal"
+          >
+            <AppIcon name="search" :size="16" />
+            <input
+              v-model="globalSearchQuery"
+              type="text"
+              placeholder="Artista, canción, álbum..."
+              @focus="abrirBuscadorGlobal"
+              @input="abrirBuscadorGlobal"
+              @keydown.esc="showGlobalSearch = false"
+            />
+            <button
+              v-if="globalSearchQuery"
+              type="button"
+              class="topbar-search-clear"
+              title="Limpiar"
+              @click.stop="globalSearchQuery = ''"
+            >
+              <AppIcon name="close" :size="13" />
+            </button>
+          </div>
+        </div>
 
         <!-- PERFIL Y CUENTA ARRIBA A LA DERECHA -->
         <div class="top-actions">
@@ -188,7 +214,7 @@
 
               <button class="dropdown-item" @click="goToConnect">
                 <AppIcon name="link" :size="15" />
-                <span>APIs conectadas</span>
+                <span>Apps conectadas</span>
               </button>
 
               <button
@@ -219,6 +245,14 @@
 
     <!-- REPRODUCTOR GLOBAL FIJO DE LADO A LADO EN EL FOOTER -->
     <BottomPlayer />
+
+    <!-- PANEL FLOTANTE DE BÚSQUEDA MULTI-PLATAFORMA (IDÉNTICO A EXPLORAR MÚSICA) -->
+    <GlobalMusicSearch
+      :is-open="showGlobalSearch"
+      :initial-query="globalSearchQuery"
+      @close="showGlobalSearch = false"
+      @update:query="val => (globalSearchQuery = val)"
+    />
   </div>
 </template>
 
@@ -226,7 +260,9 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
+import FavoritosArtwork from '@/components/FavoritosArtwork.vue'
 import BottomPlayer from '@/components/BottomPlayer.vue'
+import GlobalMusicSearch from '@/components/GlobalMusicSearch.vue'
 import { useAuth } from '@/services/auth'
 import { dbService, playlistsRevision } from '@/services/db'
 import { usePlayer } from '@/services/player'
@@ -237,7 +273,14 @@ const auth = useAuth()
 const player = usePlayer()
 
 const showUserMenu = ref(false)
+const showGlobalSearch = ref(false)
+const globalSearchQuery = ref('')
 const recentPlaylists = ref([])
+
+function abrirBuscadorGlobal() {
+  showUserMenu.value = false
+  showGlobalSearch.value = true
+}
 const playlistFavoritos = ref(null)
 const totalFavoritos = ref(0)
 
@@ -302,6 +345,13 @@ async function handleLogout() {
   await auth.logout()
   router.replace('/login')
 }
+
+watch(
+  () => route.fullPath,
+  () => {
+    showGlobalSearch.value = false
+  }
+)
 
 watch(
   () => [playlistsRevision.value, auth.currentUser.value?.id, route.fullPath],
@@ -487,11 +537,12 @@ onMounted(() => {
   background: #1b211b;
 }
 
-.fav-heart-thumb {
-  background: linear-gradient(135deg, #450af5, #8e8ee5) !important;
-  color: #ffffff !important;
-  display: grid;
-  place-items: center;
+.fav-art-thumb {
+  background: transparent !important;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 190, 85, 0.35);
+  box-shadow: 0 2px 10px rgba(235, 63, 91, 0.28);
 }
 
 .fav-pinned-item {
@@ -579,8 +630,69 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 20px;
   flex-shrink: 0;
   z-index: 40;
+}
+
+.topbar-search-wrap {
+  flex: 1;
+  max-width: 460px;
+  display: flex;
+  justify-content: center;
+}
+
+.topbar-search-box {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #171c17;
+  border: 1px solid #283027;
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: var(--muted);
+  cursor: text;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.topbar-search-box:hover,
+.topbar-search-box.active {
+  background: #1c221c;
+  border-color: var(--lime);
+  box-shadow: 0 0 0 3px rgba(184, 223, 109, 0.12);
+  color: var(--cream);
+}
+
+.topbar-search-box input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  color: var(--cream);
+  font-size: 13px;
+  outline: none;
+}
+
+.topbar-search-box input::placeholder {
+  color: #7d857c;
+}
+
+.topbar-search-clear {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cream);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.topbar-search-clear:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .content {

@@ -332,7 +332,7 @@ export const musicApiService = {
                 album: 'YouTube Oficial',
                 genero: 'Pop',
                 duracion_segundos: v.durationSeconds || 215,
-                reproducciones: Math.floor(Math.random() * 90) + 25,
+                reproducciones: v.viewCount || 0,
                 portada_url: v.thumbnail,
                 audio_url: '',
                 plataforma_origen: 'youtube',
@@ -356,7 +356,7 @@ export const musicApiService = {
       if (response.ok) {
         const data = await response.json()
         if (data.results && data.results.length > 0) {
-          return data.results.map(track => {
+          const baseTracks = data.results.map(track => {
             const highResCover = track.artworkUrl100
               ? track.artworkUrl100.replace('100x100bb', '400x400bb')
               : ''
@@ -368,7 +368,7 @@ export const musicApiService = {
               album: track.collectionName || 'Single',
               genero: this.normalizeGenre(track.primaryGenreName),
               duracion_segundos: Math.round((track.trackTimeMillis || 215000) / 1000),
-              reproducciones: Math.floor(Math.random() * 90) + 15,
+              reproducciones: 0,
               portada_url: highResCover,
               audio_url: '',
               preview_url: track.previewUrl || null,
@@ -379,6 +379,14 @@ export const musicApiService = {
               external_url: track.trackViewUrl || null
             }
           })
+          // Enriquecer reproducciones reales por plataforma en paralelo
+          const playsList = await Promise.all(
+            baseTracks.map(t => this.fetchRealTrackPlays(t, platform))
+          )
+          return baseTracks.map((t, idx) => ({
+            ...t,
+            reproducciones: playsList[idx] || 0
+          }))
         }
       }
     } catch (err) {
@@ -417,5 +425,40 @@ export const musicApiService = {
 
   getSyncedCatalogByPlatform(platform = 'spotify') {
     return CATALOGOS_SINCRONIZADOS[platform] || CATALOGOS_SINCRONIZADOS.spotify
+  },
+
+  async fetchRealTrackPlays(track, platformOverride = null) {
+    if (!track) return 0
+    const platform = platformOverride || track.plataforma_origen || 'spotify'
+    const query = `${track.titulo || ''} ${track.artista || ''}`.trim()
+    if (!query && !track.youtube_video_id) return 0
+    try {
+      const params = new URLSearchParams({
+        q: query,
+        platform
+      })
+      if (track.youtube_video_id) {
+        params.set('videoId', track.youtube_video_id)
+      }
+      const res = await fetch(`/api/track-stats?${params.toString()}`)
+      if (!res.ok) return 0
+      const data = await res.json()
+      return Number(data?.plays || 0)
+    } catch {
+      return 0
+    }
+  },
+
+  async extractPlaylistByUrl(playlistUrl) {
+    const cleanUrl = String(playlistUrl || '').trim()
+    if (!cleanUrl) {
+      throw new Error('Pega el enlace de tu playlist de Spotify, YouTube Music o YouTube.')
+    }
+    const res = await fetch(`/api/extract-playlist?url=${encodeURIComponent(cleanUrl)}`)
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok || !data.ok || !data.playlist) {
+      throw new Error(data.error || 'No se pudo extraer esa playlist. Verifica que el enlace sea público.')
+    }
+    return data.playlist
   }
 }

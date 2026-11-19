@@ -639,8 +639,16 @@ export const dbService = {
         es_publica: false,
         plataforma_origen: 'gavify',
         tipo: 'favoritos',
-        portada_url: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&auto=format&fit=crop&q=80'
+        portada_url: null
       })
+    } else if (
+      fav.portada_url &&
+      fav.portada_url.includes('1518609878373-06d740f60d8b')
+    ) {
+      // Migrar portada amarilla antigua al nuevo diseño exclusivo de Tus me gusta
+      fav.portada_url = null
+      fav.tipo = 'favoritos'
+      saveCollection(STORAGE_KEYS.PLAYLISTS, playlists)
     }
 
     return fav
@@ -729,6 +737,42 @@ export const dbService = {
       todas.unshift(cancionExistente)
       saveCollection(STORAGE_KEYS.CANCIONES, todas)
       await this.persistSongToSupabase(cancionExistente)
+    } else {
+      let cambio = false
+      if (trackPayload.portada_url) {
+        const vieja = cancionExistente.portada_url || ''
+        const esViejaGenerica =
+          !vieja ||
+          vieja.includes('images.unsplash.com') ||
+          vieja.includes('mosaic.scdn.co') ||
+          vieja.includes('pickasso.spotifycdn.com')
+        const esNuevaEspecifica =
+          !trackPayload.portada_url.includes('images.unsplash.com') &&
+          !trackPayload.portada_url.includes('mosaic.scdn.co') &&
+          !trackPayload.portada_url.includes('pickasso.spotifycdn.com')
+
+        if (esViejaGenerica && esNuevaEspecifica) {
+          cancionExistente.portada_url = trackPayload.portada_url
+          cambio = true
+        }
+      }
+      if (!cancionExistente.spotify_track_id && trackPayload.spotify_track_id) {
+        cancionExistente.spotify_track_id = trackPayload.spotify_track_id
+        cambio = true
+      }
+      if (!cancionExistente.youtube_video_id && trackPayload.youtube_video_id) {
+        cancionExistente.youtube_video_id = trackPayload.youtube_video_id
+        cambio = true
+      }
+      if (Number(trackPayload.reproducciones) > 1000 && (Number(cancionExistente.reproducciones) || 0) < 1000) {
+        cancionExistente.reproducciones = Number(trackPayload.reproducciones)
+        cambio = true
+      }
+      if (cambio) {
+        cancionExistente.actualizado_en = new Date().toISOString()
+        saveCollection(STORAGE_KEYS.CANCIONES, todas)
+        await this.persistSongToSupabase(cancionExistente)
+      }
     }
 
     if (targetPlaylistId) {
@@ -743,6 +787,18 @@ export const dbService = {
     })
 
     return cancionExistente
+  },
+
+  async updateCancionPlays(id, plays) {
+    const numPlays = Number(plays) || 0
+    if (!id || numPlays <= 0) return
+    const todas = loadCollection(STORAGE_KEYS.CANCIONES, INITIAL_CANCIONES)
+    const idx = todas.findIndex(c => c.id === id)
+    if (idx === -1) return
+    todas[idx].reproducciones = numPlays
+    todas[idx].actualizado_en = new Date().toISOString()
+    saveCollection(STORAGE_KEYS.CANCIONES, todas)
+    await this.persistSongToSupabase(todas[idx])
   },
 
   async extractSongsFromExternalApi(tracksArray = [], platform = 'spotify', targetPlaylistId = null) {
@@ -888,12 +944,12 @@ export const dbService = {
     return true
   },
 
-  // --- PLAYLISTS (AISLADAS POR ORGANIZACIÓN) ---
+  // --- PLAYLISTS (AISLADAS POR USUARIO Y ORGANIZACIÓN) ---
   markPlaylistUsed(playlistId) {
     if (!playlistId) return
     try {
       const user = requireActiveUser()
-      const key = `${STORAGE_KEYS.RECIENTES}_${user.organizacion_id}`
+      const key = `${STORAGE_KEYS.RECIENTES}_${user.id}`
       const raw = localStorage.getItem(key)
       const list = raw ? JSON.parse(raw) : []
       const updated = [playlistId, ...list.filter(id => id !== playlistId)].slice(0, 15)
@@ -911,9 +967,12 @@ export const dbService = {
     const canciones = loadCollection(STORAGE_KEYS.CANCIONES, INITIAL_CANCIONES)
     const mapaCanciones = new Map(canciones.map(c => [c.id, c]))
 
-    const playlistsOrg = playlists.filter(p => p.organizacion_id === user.organizacion_id)
+    // Mostrar únicamente las playlists propias del usuario autenticado (nunca de otros usuarios)
+    const playlistsUsuario = playlists.filter(
+      p => p.organizacion_id === user.organizacion_id && p.usuario_id === user.id
+    )
 
-    return playlistsOrg
+    return playlistsUsuario
       .map(p => {
         const relsDePl = rels
           .filter(r => r.playlist_id === p.id)
@@ -922,6 +981,9 @@ export const dbService = {
         const count = tracks.length
         const duracionTotal = tracks.reduce((acc, t) => acc + (Number(t.duracion_segundos) || 180), 0)
         const covers = tracks.map(t => t.portada_url).filter(Boolean).slice(0, 4)
+
+        const esFavoritos = p.tipo === 'favoritos' || (p.nombre || '').toLowerCase().trim() === 'tus me gusta'
+        const portadaLimpia = esFavoritos ? null : p.portada_url
 
         // Contar cuántas canciones están repetidas DENTRO de esta misma playlist
         const conteoEnEstaLista = {}
@@ -933,10 +995,12 @@ export const dbService = {
 
         return {
           ...p,
-          creador_nombre: p.creador_nombre || user.nombre || 'Sebastian Gavilan',
+          tipo: esFavoritos ? 'favoritos' : p.tipo,
+          portada_url: portadaLimpia,
+          creador_nombre: p.creador_nombre || user.nombre || 'Usuario',
           total_canciones: count,
           duracion_total_segundos: duracionTotal,
-          collage_portadas: covers,
+          collage_portadas: esFavoritos ? [] : covers,
           repetidas_count: repetidasMismaListaCount,
           playlist_canciones: [{ count }]
         }
@@ -948,7 +1012,7 @@ export const dbService = {
     const user = requireActiveUser()
     const todas = await this.getPlaylists()
     try {
-      const key = `${STORAGE_KEYS.RECIENTES}_${user.organizacion_id}`
+      const key = `${STORAGE_KEYS.RECIENTES}_${user.id}`
       const raw = localStorage.getItem(key)
       const recentIds = raw ? JSON.parse(raw) : []
       if (!recentIds.length) return todas
@@ -991,6 +1055,7 @@ export const dbService = {
       creador_nombre: user.nombre,
       organizacion_id: user.organizacion_id,
       ...validados,
+      tipo: payload.tipo || null,
       plataforma_origen: payload.plataforma_origen || 'gavify',
       portada_url: payload.portada_url || null,
       portada_ruta: payload.portada_ruta || null,
@@ -1022,14 +1087,14 @@ export const dbService = {
     if (idx === -1) throw new Error('La playlist no existe.')
     const actual = playlists[idx]
 
-    if (actual.organizacion_id !== user.organizacion_id) {
+    if (actual.organizacion_id !== user.organizacion_id || actual.usuario_id !== user.id) {
       registrarEventoSeguridad({
-        accion: 'UPDATE playlist (Otra Organización)',
+        accion: 'UPDATE playlist (Otro Usuario / Organización)',
         recurso: actual.nombre,
         permitido: false,
-        motivo: 'Bloqueado por aislamiento Multi-Tenant.'
+        motivo: 'Bloqueado: La playlist pertenece a otro usuario o a otra organización.'
       })
-      throw new Error('403 Prohibido (Multi-Tenant): No puedes modificar una playlist de otra organización.')
+      throw new Error('403 Prohibido: No puedes modificar una playlist de otro usuario.')
     }
 
     if (user.rol === 'miembro_lector') {
@@ -1046,7 +1111,7 @@ export const dbService = {
     const actualizada = {
       ...actual,
       ...validados,
-      portada_url: payload.portada_url ?? actual.portada_url,
+      portada_url: 'portada_url' in payload ? payload.portada_url : actual.portada_url,
       portada_ruta: payload.portada_ruta ?? actual.portada_ruta,
       actualizado_en: new Date().toISOString()
     }
@@ -1054,6 +1119,7 @@ export const dbService = {
     playlists[idx] = actualizada
     saveCollection(STORAGE_KEYS.PLAYLISTS, playlists)
     playlistsRevision.value++
+    await this.persistPlaylistToSupabase(actualizada)
 
     registrarEventoSeguridad({
       accion: 'UPDATE playlist',
@@ -1072,14 +1138,14 @@ export const dbService = {
 
     if (!actual) throw new Error('La playlist no existe.')
 
-    if (actual.organizacion_id !== user.organizacion_id) {
+    if (actual.organizacion_id !== user.organizacion_id || actual.usuario_id !== user.id) {
       registrarEventoSeguridad({
-        accion: 'DELETE playlist (Otra Organización)',
+        accion: 'DELETE playlist (Otro Usuario / Organización)',
         recurso: actual.nombre,
         permitido: false,
-        motivo: 'Bloqueado por aislamiento Multi-Tenant.'
+        motivo: 'Bloqueado: La playlist pertenece a otro usuario o a otra organización.'
       })
-      throw new Error('403 Prohibido (Multi-Tenant): No puedes eliminar una playlist de otra organización.')
+      throw new Error('403 Prohibido: No puedes eliminar una playlist de otro usuario.')
     }
 
     if (user.rol === 'miembro_lector') {
@@ -1103,6 +1169,9 @@ export const dbService = {
       rels.filter(r => r.playlist_id !== id)
     )
     playlistsRevision.value++
+    if (supabase) {
+      supabase.from('playlists').delete().eq('id', id).then().catch(() => {})
+    }
 
     registrarEventoSeguridad({
       accion: 'DELETE playlist',
@@ -1118,8 +1187,8 @@ export const dbService = {
     const user = requireActiveUser()
     const playlists = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
     const pl = playlists.find(p => p.id === playlistId)
-    if (!pl || pl.organizacion_id !== user.organizacion_id) {
-      throw new Error('403 Prohibido: La playlist no pertenece a tu organización.')
+    if (!pl || pl.organizacion_id !== user.organizacion_id || pl.usuario_id !== user.id) {
+      throw new Error('403 Prohibido: La playlist no pertenece a tu cuenta.')
     }
 
     const rels = loadCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, INITIAL_PLAYLIST_CANCIONES)
@@ -1197,8 +1266,8 @@ export const dbService = {
 
     const playlists = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
     const pl = playlists.find(p => p.id === playlistId)
-    if (!pl || pl.organizacion_id !== user.organizacion_id) {
-      throw new Error('403 Prohibido: Playlist fuera de tu organización.')
+    if (!pl || pl.organizacion_id !== user.organizacion_id || pl.usuario_id !== user.id) {
+      throw new Error('403 Prohibido: Esta playlist no pertenece a tu cuenta.')
     }
 
     const rels = loadCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, INITIAL_PLAYLIST_CANCIONES)
@@ -1224,6 +1293,14 @@ export const dbService = {
     }
 
     const rels = loadCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, INITIAL_PLAYLIST_CANCIONES)
+    const relTarget = rels.find(r => r.id === playlistCancionId)
+    if (relTarget) {
+      const playlists = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
+      const pl = playlists.find(p => p.id === relTarget.playlist_id)
+      if (pl && (pl.organizacion_id !== user.organizacion_id || pl.usuario_id !== user.id)) {
+        throw new Error('403 Prohibido: No puedes modificar una playlist de otro usuario.')
+      }
+    }
     saveCollection(
       STORAGE_KEYS.PLAYLIST_CANCIONES,
       rels.filter(r => r.id !== playlistCancionId)
@@ -1239,7 +1316,7 @@ export const dbService = {
   async getCancionesRepetidas() {
     const user = requireActiveUser()
     const playlistsOrg = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
-      .filter(p => p.organizacion_id === user.organizacion_id)
+      .filter(p => p.organizacion_id === user.organizacion_id && p.usuario_id === user.id)
     const idsPlaylistsOrg = new Set(playlistsOrg.map(p => p.id))
 
     const cancionesOrg = loadCollection(STORAGE_KEYS.CANCIONES, INITIAL_CANCIONES)
