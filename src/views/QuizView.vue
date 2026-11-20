@@ -18,39 +18,13 @@
         </div>
       </div>
 
-      <!-- Selector de modo: Artista o Género -->
-      <div class="quiz-mode-tabs">
-        <button
-          type="button"
-          class="quiz-mode-btn"
-          :class="{ active: modoQuiz === 'artista' }"
-          @click="cambiarModo('artista')"
-        >
-          <AppIcon name="mic" :size="16" />
-          <span>Por Artista</span>
-        </button>
-        <button
-          type="button"
-          class="quiz-mode-btn"
-          :class="{ active: modoQuiz === 'genero' }"
-          @click="cambiarModo('genero')"
-        >
-          <AppIcon name="music" :size="16" />
-          <span>Por Género</span>
-        </button>
-      </div>
-
-      <!-- Buscador de artista o género -->
+      <!-- Buscador automático de artista o género -->
       <div class="quiz-search-box">
         <AppIcon name="search" :size="17" />
         <input
           v-model="temaElegido"
           type="text"
-          :placeholder="
-            modoQuiz === 'artista'
-              ? 'Busca un artista (ej: Coldplay, Duki, Taylor Swift, Soda Stereo...)'
-              : 'Escribe o elige un género (ej: Rock, Pop, Trap, Electrónica...)'
-          "
+          placeholder="Escribe un artista o género (ej: Coldplay, Duki, Rock, Pop, Trap...)"
           @keyup.enter="iniciarQuiz"
         />
         <button
@@ -64,11 +38,9 @@
         </button>
       </div>
 
-      <!-- Sugerencias rápidas -->
+      <!-- Sugerencias rápidas (artistas y géneros) -->
       <div class="quiz-chips-wrap">
-        <span class="tiny">
-          {{ modoQuiz === 'artista' ? 'ARTISTAS SUGERIDOS:' : 'GÉNEROS SUGERIDOS:' }}
-        </span>
+        <span class="tiny">SUGERENCIAS RÁPIDAS:</span>
         <div class="quiz-chips-list">
           <button
             v-for="item in sugerenciasActuales"
@@ -142,8 +114,11 @@
         <span class="quiz-type-tag">{{ etiquetaTipo(preguntaActual.tipo) }}</span>
         <h3 class="quiz-question-title">{{ preguntaActual.enunciado }}</h3>
 
-        <!-- Contexto opcional: carátula o reproductor de audio 30s -->
-        <div v-if="preguntaActual.portada && preguntaActual.tipo !== 'audio'" class="quiz-track-hint">
+        <!-- Contexto opcional: carátula (si oculta artista, solo se muestra al responder) -->
+        <div
+          v-if="preguntaActual.portada && preguntaActual.tipo !== 'audio' && (respondida || !preguntaActual.ocultarHintHastaResponder)"
+          class="quiz-track-hint"
+        >
           <img :src="preguntaActual.portada" alt="Portada" class="quiz-hint-cover" />
           <div>
             <strong>{{ preguntaActual.trackNombre }}</strong>
@@ -176,13 +151,23 @@
               :disabled="respondida"
               autofocus
             />
-            <button
-              type="submit"
-              class="primary"
-              :disabled="respondida || !respuestaTexto.trim()"
-            >
-              Comprobar
-            </button>
+            <div class="quiz-lyric-btns">
+              <button
+                type="submit"
+                class="primary"
+                :disabled="respondida || !respuestaTexto.trim()"
+              >
+                Comprobar
+              </button>
+              <button
+                type="button"
+                class="outline"
+                :disabled="respondida"
+                @click="pasarPreguntaTexto"
+              >
+                Pasar
+              </button>
+            </div>
           </form>
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
             <small class="muted">
@@ -319,8 +304,7 @@ const GENEROS_SUGERIDOS = [
 ]
 
 const fase = ref('setup') // 'setup' | 'playing' | 'result'
-const modoQuiz = ref('artista') // 'artista' | 'genero'
-const temaElegido = ref('Coldplay')
+const temaElegido = ref('')
 const temaActivo = ref('')
 const cargando = ref(false)
 const errorQuiz = ref('')
@@ -341,9 +325,10 @@ const audioSonando = ref(false)
 let previewAudio = null
 let timerInterval = null
 
-const sugerenciasActuales = computed(() =>
-  modoQuiz.value === 'artista' ? ARTISTAS_SUGERIDOS : GENEROS_SUGERIDOS
-)
+const sugerenciasActuales = computed(() => [
+  ...ARTISTAS_SUGERIDOS.slice(0, 7),
+  ...GENEROS_SUGERIDOS.slice(0, 5)
+])
 
 const preguntaActual = computed(() => preguntas.value[indiceActual.value] || null)
 
@@ -584,6 +569,7 @@ async function iniciarQuiz() {
             enunciado: `¿Quién interpreta la canción "${tr.trackName}"?`,
             opciones: barajar([tr.artistName, ...distractors]),
             respuestaCorrecta: tr.artistName,
+            ocultarHintHastaResponder: true,
             portada: tr.artworkUrl100?.replace('100x100bb', '200x200bb') || '',
             trackNombre: tr.trackName,
             trackArtista: tr.artistName
@@ -700,6 +686,12 @@ function togglePreviewAudio() {
 function seleccionarOpcion(opcion) {
   if (respondida.value) return
   registrarRespuesta(opcion)
+}
+
+function pasarPreguntaTexto() {
+  if (respondida.value) return
+  intentoFallidoTexto.value = ''
+  registrarRespuesta('')
 }
 
 function enviarRespuestaTexto() {
@@ -1077,12 +1069,21 @@ onBeforeUnmount(() => {
 .quiz-lyric-form {
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.quiz-lyric-btns {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .quiz-lyric-input {
   flex: 1;
   min-width: 0;
-  height: 42px;
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
   padding: 0 14px;
   border-radius: 10px;
   background: #1b201b;
@@ -1090,6 +1091,10 @@ onBeforeUnmount(() => {
   color: #ffffff;
   font-size: 14px;
   outline: none;
+}
+
+.quiz-lyric-input:focus {
+  border-color: var(--lime);
 }
 
 .quiz-options-grid {
@@ -1271,6 +1276,23 @@ onBeforeUnmount(() => {
 
   .quiz-lyric-form {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .quiz-lyric-input {
+    flex: 0 0 auto;
+    height: 46px;
+    min-height: 46px;
+    font-size: 15px;
+  }
+
+  .quiz-lyric-btns {
+    width: 100%;
+  }
+
+  .quiz-lyric-btns button {
+    flex: 1;
+    justify-content: center;
   }
 
   .quiz-question-title {
