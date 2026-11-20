@@ -1,5 +1,174 @@
 <template>
   <div>
+    <!-- VENTANA DE FILA DE REPRODUCCIÓN (COLA / LISTA AL COSTADO IZQUIERDO) -->
+    <transition name="queue-slide">
+      <section
+        v-if="player.currentTrack.value && player.showQueue.value"
+        class="queue-window"
+        :class="{ 'queue-expanded': player.isQueueExpanded.value }"
+      >
+        <div class="queue-window-head">
+          <div class="queue-head-meta">
+            <AppIcon name="queue" :size="18" />
+            <div>
+              <strong>Fila de reproducción</strong>
+              <small>{{ player.queue.value.length }} {{ player.queue.value.length === 1 ? 'canción' : 'canciones' }} en la lista</small>
+            </div>
+          </div>
+
+          <div class="queue-head-actions">
+            <button
+              type="button"
+              class="queue-head-btn"
+              :title="player.isQueueExpanded.value ? 'Achicar fila' : 'Agrandar fila'"
+              @click="player.toggleExpandQueue()"
+            >
+              <AppIcon :name="player.isQueueExpanded.value ? 'collapse' : 'expand'" :size="14" />
+              <span>{{ player.isQueueExpanded.value ? 'Achicar' : 'Agrandar' }}</span>
+            </button>
+            <button
+              type="button"
+              class="queue-close-btn"
+              title="Cerrar fila de reproducción"
+              @click="player.showQueue.value = false"
+            >
+              <AppIcon name="close" :size="14" />
+            </button>
+          </div>
+        </div>
+
+        <div class="queue-window-body">
+          <!-- CANCIONES ANTERIORES EN LA FILA -->
+          <div v-if="anterioresEnCola.length" class="queue-previous-box">
+            <span class="queue-section-label queue-label-muted">ANTERIORES EN LA FILA</span>
+            <div class="queue-track-list">
+              <div
+                v-for="item in anterioresEnCola"
+                :key="'prev-' + item.actualIndex"
+                class="queue-track-row is-previous-row"
+                :title="'Volver a reproducir ' + item.track.titulo"
+                @click="player.playTrackAt(item.actualIndex)"
+              >
+                <div class="queue-row-left">
+                  <span class="queue-pos-num">↺</span>
+                  <VinylThumb
+                    :src="item.track.portada_url"
+                    :alt="item.track.titulo"
+                    :size="36"
+                  />
+                  <div class="queue-track-meta">
+                    <div class="queue-track-title-wrap">
+                      <MarqueeText :text="item.track.titulo" class="queue-track-title" />
+                    </div>
+                    <div class="queue-track-artist-wrap">
+                      <MarqueeText :text="item.track.artista" class="queue-track-artist" />
+                      <span class="queue-origin-tag">{{ etiquetaPlataforma(item.track.plataforma_origen) }}</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="queue-row-right">
+                  <span class="queue-duration">{{ formatearDuracion(item.track.duracion_segundos) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CANCIÓN QUE SE ESTÁ REPRODUCIENDO AHORA -->
+          <div class="queue-now-playing-box">
+            <span class="queue-section-label">SONANDO AHORA</span>
+            <div class="queue-track-row is-current-row">
+              <div class="queue-row-left">
+                <VinylThumb
+                  :src="player.currentTrack.value.portada_url"
+                  :alt="player.currentTrack.value.titulo"
+                  :size="42"
+                  :spinning="player.isPlaying.value"
+                />
+                <div class="queue-track-meta">
+                  <div class="queue-track-title-wrap">
+                    <MarqueeText :text="player.currentTrack.value.titulo" class="queue-track-title active" />
+                  </div>
+                  <div class="queue-track-artist-wrap">
+                    <MarqueeText :text="player.currentTrack.value.artista" class="queue-track-artist" />
+                  </div>
+                </div>
+              </div>
+              <div class="queue-row-badge">
+                <AppIcon name="play" :size="12" />
+                <span>En vivo</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SIGUIENTES EN LA FILA (CARGA DE A 20 TEMAS) -->
+          <div class="queue-upcoming-box">
+            <div class="queue-upcoming-header">
+              <span class="queue-section-label">A CONTINUACIÓN EN LA COLA</span>
+              <small v-if="siguientesEnCola.length" class="queue-count-tag">
+                Mostrando {{ visibleQueueCount }} de {{ siguientesEnCola.length }} siguientes
+              </small>
+            </div>
+
+            <div v-if="!siguientesEnCola.length" class="queue-empty-upcoming">
+              <p>No hay más canciones en la fila de reproducción.</p>
+            </div>
+
+            <div v-else class="queue-track-list">
+              <div
+                v-for="item in visibleQueueList"
+                :key="item.actualIndex"
+                class="queue-track-row"
+                :title="'Reproducir ' + item.track.titulo"
+                @click="player.playTrackAt(item.actualIndex)"
+              >
+                <div class="queue-row-left">
+                  <span class="queue-pos-num">#{{ item.posicion }}</span>
+                  <VinylThumb
+                    :src="item.track.portada_url"
+                    :alt="item.track.titulo"
+                    :size="38"
+                  />
+                  <div class="queue-track-meta">
+                    <div class="queue-track-title-wrap">
+                      <MarqueeText :text="item.track.titulo" class="queue-track-title" />
+                    </div>
+                    <div class="queue-track-artist-wrap">
+                      <MarqueeText :text="item.track.artista" class="queue-track-artist" />
+                      <span class="queue-origin-tag">{{ etiquetaPlataforma(item.track.plataforma_origen) }}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="queue-row-right">
+                  <span class="queue-duration">{{ formatearDuracion(item.track.duracion_segundos) }}</span>
+                  <button
+                    type="button"
+                    class="queue-play-hover-btn"
+                    title="Poner ahora"
+                    @click.stop="player.playTrackAt(item.actualIndex)"
+                  >
+                    <AppIcon name="play" :size="13" />
+                  </button>
+                </div>
+              </div>
+
+              <!-- BOTÓN PARA CARGAR DE A 20 TEMAS MÁS -->
+              <div v-if="quedanMasPorCargar" class="queue-load-more-wrap">
+                <button
+                  type="button"
+                  class="btn-queue-load-more"
+                  @click="cargar20MasEnFila"
+                >
+                  <AppIcon name="plus" :size="14" />
+                  <span>Cargar siguientes 20 canciones (+{{ Math.min(20, siguientesEnCola.length - limiteFilaVisible) }})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </transition>
+
     <!-- VENTANA DE LETRAS DE LA CANCIÓN (LRCLIB / LYRICS API) -->
     <transition name="lyrics-fade">
       <section
@@ -100,12 +269,12 @@
 
           <div class="player-quick-actions">
             <button
-              class="player-icon-btn"
-              :class="{ saved: player.isCurrentSaved.value }"
-              :title="player.isCurrentSaved.value ? 'Guardada en tu biblioteca' : 'Guardar canción'"
+              class="player-icon-btn btn-favorite-fire"
+              :class="{ 'is-favorite': player.isCurrentSaved.value }"
+              :title="player.isCurrentSaved.value ? 'En tus canciones favoritas (guardada)' : 'Marcar como favorita (me gusta)'"
               @click="guardarCancionActual"
             >
-              <AppIcon :name="player.isCurrentSaved.value ? 'heart-filled' : 'heart'" :size="18" />
+              <AppIcon :name="player.isCurrentSaved.value ? 'fire-filled' : 'fire'" :size="18" />
             </button>
 
             <button
@@ -156,11 +325,11 @@
 
             <button
               class="transport-btn"
-              :class="{ active: player.isRepeat.value }"
-              title="Repetir canción"
+              :class="{ active: player.isRepeat.value || player.isRepeatOne.value }"
+              :title="player.isRepeatOne.value ? 'Repetir el mismo tema (activado)' : player.isRepeat.value ? 'Repetir lista completa (activado)' : 'Repetir desactivado'"
               @click="player.toggleRepeat()"
             >
-              <AppIcon name="repeat" :size="17" />
+              <AppIcon :name="player.isRepeatOne.value ? 'repeat-one' : 'repeat'" :size="17" />
             </button>
           </div>
 
@@ -181,8 +350,18 @@
           </div>
         </div>
 
-        <!-- COLUMNA DERECHA: Video (ojito), Letras (texto), Volumen y Quitar -->
+        <!-- COLUMNA DERECHA: Fila de reproducción, Video, Letras, Volumen y Quitar -->
         <div class="player-right">
+          <button
+            class="close-player-pill"
+            :class="{ 'video-active-pill': player.showQueue.value }"
+            title="Ver fila de reproducción (canciones siguientes)"
+            @click="player.toggleQueue()"
+          >
+            <AppIcon name="queue" :size="15" />
+            <span>Fila</span>
+          </button>
+
           <button
             class="close-player-pill"
             :class="{ 'video-active-pill': player.showMiniVideo.value }"
@@ -240,7 +419,7 @@
 </template>
 
 <script setup>
-import { computed, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import AppIcon from '@/components/AppIcon.vue'
 import MarqueeText from '@/components/MarqueeText.vue'
 import VinylThumb from '@/components/VinylThumb.vue'
@@ -250,6 +429,101 @@ import { useAuth } from '@/services/auth'
 
 const player = usePlayer()
 const auth = useAuth()
+
+// Paginación de a 20 temas para la fila de reproducción
+const limiteFilaVisible = ref(20)
+
+watch(
+  () => player.currentTrack.value?.id,
+  () => {
+    // Al cambiar de tema reseteamos la fila a sus primeros 20 siguientes
+    limiteFilaVisible.value = 20
+  }
+)
+
+const anterioresEnCola = computed(() => {
+  const q = player.queue.value || []
+  const curIdx = player.currentIndex.value
+  if (!q.length || curIdx === -1) return []
+
+  const resultado = []
+  if (player.isShuffle.value && player.shuffleOrder.value?.length === q.length) {
+    const currentPos = player.shuffleOrder.value.indexOf(curIdx)
+    const prevIndices = currentPos > 0 ? player.shuffleOrder.value.slice(Math.max(0, currentPos - 10), currentPos) : []
+    for (const actualIndex of prevIndices) {
+      if (q[actualIndex]) {
+        resultado.push({ track: q[actualIndex], actualIndex })
+      }
+    }
+  } else {
+    const start = Math.max(0, curIdx - 10)
+    for (let i = start; i < curIdx; i++) {
+      if (q[i]) {
+        resultado.push({ track: q[i], actualIndex: i })
+      }
+    }
+  }
+  return resultado
+})
+
+const siguientesEnCola = computed(() => {
+  const q = player.queue.value || []
+  const curIdx = player.currentIndex.value
+  if (!q.length || curIdx === -1) return []
+
+  const resultado = []
+
+  if (player.isShuffle.value && player.shuffleOrder.value?.length === q.length) {
+    const currentPos = player.shuffleOrder.value.indexOf(curIdx)
+    const upcomingIndices = currentPos !== -1
+      ? player.shuffleOrder.value.slice(currentPos + 1)
+      : player.shuffleOrder.value.filter(idx => idx !== curIdx)
+
+    upcomingIndices.forEach((actualIndex, idxOffset) => {
+      const track = q[actualIndex]
+      if (track) {
+        resultado.push({
+          track,
+          actualIndex,
+          posicion: idxOffset + 1
+        })
+      }
+    })
+  } else {
+    for (let i = curIdx + 1; i < q.length; i++) {
+      resultado.push({
+        track: q[i],
+        actualIndex: i,
+        posicion: i + 1
+      })
+    }
+  }
+
+  return resultado
+})
+
+const visibleQueueList = computed(() => {
+  return siguientesEnCola.value.slice(0, limiteFilaVisible.value)
+})
+
+const visibleQueueCount = computed(() => {
+  return visibleQueueList.value.length
+})
+
+const quedanMasPorCargar = computed(() => {
+  return siguientesEnCola.value.length > limiteFilaVisible.value
+})
+
+function cargar20MasEnFila() {
+  limiteFilaVisible.value += 20
+}
+
+function formatearDuracion(segundos) {
+  const s = Math.max(0, Math.floor(Number(segundos) || 0))
+  const mins = Math.floor(s / 60)
+  const rem = String(s % 60).padStart(2, '0')
+  return `${mins}:${rem}`
+}
 
 const porcentajeProgreso = computed(() => {
   const dur = Number(player.duration.value) || 1
@@ -302,10 +576,13 @@ async function guardarCancionActual() {
 }
 
 watch(
-  () => player.currentTrack.value?.id,
-  async (newId) => {
-    if (newId) {
-      player.isCurrentSaved.value = await dbService.isCancionFavorita(newId)
+  () => [player.currentTrack.value?.id, player.currentTrack.value?.titulo, player.currentTrack.value?.artista],
+  async () => {
+    const track = player.currentTrack.value
+    if (track) {
+      player.isCurrentSaved.value = await dbService.isCancionFavorita(track)
+    } else {
+      player.isCurrentSaved.value = false
     }
   },
   { immediate: true }
@@ -330,6 +607,377 @@ function etiquetaPlataforma(plat) {
 </script>
 
 <style scoped>
+/* ========================================================================= */
+/* VENTANA DE FILA DE REPRODUCCIÓN (AL COSTADO DERECHO, AGRANDABLE)          */
+/* ========================================================================= */
+.queue-window {
+  position: fixed;
+  right: 24px;
+  left: auto;
+  bottom: 104px;
+  width: 420px;
+  max-width: calc(100vw - 48px);
+  height: 520px;
+  max-height: calc(100vh - 130px);
+  background: rgba(14, 18, 14, 0.98);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 24px 50px rgba(0, 0, 0, 0.85);
+  z-index: 946;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.queue-window.queue-expanded {
+  right: 24px;
+  left: auto;
+  top: 24px;
+  bottom: 104px;
+  width: 580px;
+  height: calc(100vh - 128px);
+  max-height: calc(100vh - 128px);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.95);
+  border-color: rgba(30, 215, 96, 0.3);
+}
+
+.queue-window-head {
+  height: 54px;
+  padding: 0 16px;
+  background: #111511;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.queue-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #1ed760;
+  min-width: 0;
+}
+
+.queue-head-meta div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.queue-head-meta strong {
+  font-size: 13px;
+  color: #e7ece6;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-head-meta small {
+  font-size: 11px;
+  color: #8c978b;
+}
+
+.queue-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.queue-head-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e7ece6;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.queue-head-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #1ed760;
+}
+
+.queue-close-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e7ece6;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  font-size: 13px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+
+.queue-close-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ff5c5c;
+}
+
+.queue-window-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.queue-previous-box {
+  opacity: 0.85;
+}
+
+.queue-label-muted {
+  color: #8c978b !important;
+}
+
+.queue-track-row.is-previous-row {
+  opacity: 0.78;
+}
+
+.queue-track-row.is-previous-row:hover {
+  opacity: 1;
+}
+
+.queue-section-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: #1ed760;
+  margin-bottom: 8px;
+}
+
+.queue-now-playing-box {
+  background: rgba(30, 215, 96, 0.06);
+  border: 1px solid rgba(30, 215, 96, 0.22);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.queue-upcoming-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.queue-count-tag {
+  font-size: 11px;
+  color: #8c978b;
+}
+
+.queue-empty-upcoming {
+  padding: 24px 12px;
+  text-align: center;
+  color: #7d877c;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+}
+
+.queue-track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.queue-track-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.queue-track-row:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateX(2px);
+}
+
+.queue-track-row.is-current-row {
+  cursor: default;
+  background: transparent;
+  padding: 0;
+}
+
+.queue-track-row.is-current-row:hover {
+  background: transparent;
+  border-color: transparent;
+  transform: none;
+}
+
+.queue-row-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.queue-pos-num {
+  font-size: 11px;
+  color: #6d776c;
+  font-weight: 700;
+  width: 22px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.queue-track-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.queue-track-title-wrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.queue-track-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #e2e8e1;
+}
+
+.queue-track-title.active {
+  color: #1ed760;
+}
+
+.queue-track-artist-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.queue-track-artist {
+  font-size: 11px;
+  color: #8c978b;
+}
+
+.queue-origin-tag {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #626d61;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.queue-row-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.queue-duration {
+  font-size: 11px;
+  color: #7a8479;
+}
+
+.queue-play-hover-btn {
+  background: #1ed760;
+  color: #0b0d0b;
+  border: none;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  opacity: 0.85;
+  transition: all 0.15s ease;
+}
+
+.queue-play-hover-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.queue-row-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(30, 215, 96, 0.15);
+  color: #1ed760;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.queue-load-more-wrap {
+  padding-top: 8px;
+  display: flex;
+  justify-content: center;
+}
+
+.btn-queue-load-more {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(255, 255, 255, 0.18);
+  color: #d1d8d0;
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition: all 0.16s ease;
+}
+
+.btn-queue-load-more:hover {
+  background: rgba(30, 215, 96, 0.12);
+  border-color: #1ed760;
+  color: #ffffff;
+}
+
+/* Transición animada suave para la fila */
+.queue-slide-enter-active,
+.queue-slide-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.queue-slide-enter-from,
+.queue-slide-leave-to {
+  opacity: 0;
+  transform: translateY(20px) scale(0.96);
+}
+
 /* Ventana de Letras (Chiquita o Expandida a todo el cuadro de interfaz) */
 .lyrics-window {
   position: fixed;
@@ -658,10 +1306,30 @@ function etiquetaPlataforma(plat) {
   transform: scale(1.05);
 }
 
-.player-icon-btn.saved {
-  color: #1ed760;
-  border-color: rgba(30, 215, 96, 0.45);
-  background: rgba(30, 215, 96, 0.12);
+.player-icon-btn.btn-favorite-fire {
+  color: #a4aca3;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.player-icon-btn.btn-favorite-fire:hover {
+  color: #ff7844;
+  border-color: rgba(255, 120, 68, 0.35);
+  background: rgba(255, 120, 68, 0.12);
+  transform: scale(1.12);
+}
+
+.player-icon-btn.btn-favorite-fire.is-favorite {
+  color: #ffffff;
+  border-color: #ff8c00;
+  background: linear-gradient(135deg, #e03a1e 0%, #ff8c00 100%);
+  box-shadow: 0 0 14px rgba(255, 140, 0, 0.55);
+  animation: fire-pop 0.35s ease;
+}
+
+@keyframes fire-pop {
+  0% { transform: scale(0.85); }
+  50% { transform: scale(1.22); }
+  100% { transform: scale(1); }
 }
 
 .player-icon-btn.danger-hover:hover {

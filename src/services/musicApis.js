@@ -6,15 +6,33 @@
  * 3. YouTube Data API v3 / InnerTube (Extracción de Videos Musicales, Audio Completo y Listas)
  */
 
-const API_KEYS_STORAGE = 'gavify_external_api_config'
+const API_KEYS_STORAGE_PREFIX = 'gavify_external_api_config'
+
+function getApiConfigStorageKey() {
+  try {
+    const rawUser = localStorage.getItem('gavify_current_user')
+    const user = rawUser ? JSON.parse(rawUser) : null
+    const userId = user?.id ? String(user.id) : 'anon'
+    return `${API_KEYS_STORAGE_PREFIX}_${userId}`
+  } catch {
+    return `${API_KEYS_STORAGE_PREFIX}_anon`
+  }
+}
 
 export function getExternalApiConfig() {
   try {
-    const raw = localStorage.getItem(API_KEYS_STORAGE)
+    const raw = localStorage.getItem(getApiConfigStorageKey())
     const saved = raw ? JSON.parse(raw) : {}
     return {
       spotifyClientId: saved.spotifyClientId || import.meta.env.VITE_SPOTIFY_CLIENT_ID || '',
       spotifyAccessToken: saved.spotifyAccessToken || '',
+      spotifyRefreshToken: saved.spotifyRefreshToken || '',
+      spotifyTokenExpiresAt: Number(saved.spotifyTokenExpiresAt) || 0,
+      youtubeClientId:
+        saved.youtubeClientId ||
+        import.meta.env.VITE_YOUTUBE_CLIENT_ID ||
+        import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+        '',
       youtubeApiKey: saved.youtubeApiKey || import.meta.env.VITE_YOUTUBE_API_KEY || '',
       youtubeAccessToken: saved.youtubeAccessToken || ''
     }
@@ -22,6 +40,9 @@ export function getExternalApiConfig() {
     return {
       spotifyClientId: '',
       spotifyAccessToken: '',
+      spotifyRefreshToken: '',
+      spotifyTokenExpiresAt: 0,
+      youtubeClientId: '',
       youtubeApiKey: '',
       youtubeAccessToken: ''
     }
@@ -31,7 +52,7 @@ export function getExternalApiConfig() {
 export function saveExternalApiConfig(config) {
   const current = getExternalApiConfig()
   const updated = { ...current, ...config }
-  localStorage.setItem(API_KEYS_STORAGE, JSON.stringify(updated))
+  localStorage.setItem(getApiConfigStorageKey(), JSON.stringify(updated))
   return updated
 }
 
@@ -45,21 +66,181 @@ export const CATALOGOS_SINCRONIZADOS = {
 }
 
 export const musicApiService = {
-  async connectSpotifyOAuth() {
+  async getSpotifyClientId() {
     const config = getExternalApiConfig()
-    if (config.spotifyClientId && config.spotifyClientId !== 'your-spotify-client-id' && config.useRealRedirect) {
-      const verifier = crypto.randomUUID() + crypto.randomUUID()
-      sessionStorage.setItem('spotify_pkce_verifier', verifier)
-      const redirectUri = encodeURIComponent(window.location.origin + '/connect')
-      const scopes = encodeURIComponent('user-library-read playlist-read-private playlist-modify-public playlist-modify-private')
-      window.location.href = `https://accounts.spotify.com/authorize?client_id=${config.spotifyClientId}&response_type=code&redirect_uri=${redirectUri}&scope=${scopes}`
-      return { redirected: true }
+    if (config.spotifyClientId && config.spotifyClientId !== 'your-spotify-client-id') {
+      return config.spotifyClientId
     }
+    try {
+      const res = await fetch('/api/spotify-config')
+      if (res.ok) {
+        const data = await res.json()
+        if (data?.clientId) return data.clientId
+      }
+    } catch {}
+    return ''
+  },
+
+  async startSpotifyPkceAuth() {
+    const clientId = await this.getSpotifyClientId()
+    if (!clientId) {
+      throw new Error('Falta configurar SPOTIFY_CLIENT_ID en .env para iniciar sesión real con Spotify.')
+    }
+
+    const randomBytes = new Uint8Array(48)
+    crypto.getRandomValues(randomBytes)
+    const verifier = btoa(String.fromCharCode(...randomBytes))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+    const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+
+    const redirectUri = `${window.location.origin}/connect`
+    sessionStorage.setItem('spotify_pkce_verifier', verifier)
+    sessionStorage.setItem('spotify_pkce_client_id', clientId)
+    sessionStorage.setItem('spotify_pkce_redirect_uri', redirectUri)
+
+    const scopes =
+      'streaming user-read-playback-state user-modify-playback-state playlist-read-private playlist-read-collaborative user-read-email user-read-private'
+    const authUrl = new URL('https://accounts.spotify.com/authorize')
+    authUrl.searchParams.set('client_id', clientId)
+    authUrl.searchParams.set('response_type', 'code')
+    authUrl.searchParams.set('redirect_uri', redirectUri)
+    authUrl.searchParams.set('code_challenge_method', 'S256')
+    authUrl.searchParams.set('code_challenge', challenge)
+    authUrl.searchParams.set('scope', scopes)
+    authUrl.searchParams.set('show_dialog', 'true')
+
+    window.location.href = authUrl.toString()
+  },
+
+  async completeSpotifyPkceCallback(code) {
+    const verifier = sessionStorage.getItem('spotify_pkce_verifier')
+    const clientId = sessionStorage.getItem('spotify_pkce_client_id') || (await this.getSpotifyClientId())
+    const redirectUri = sessionStorage.getItem('spotify_pkce_redirect_uri') || `${window.location.origin}/connect`
+
+    if (!verifier || !clientId) {
+      throw new Error('La sesión de autorización de Spotify expiró. Intenta conectar nuevamente.')
+    }
+
+    const body = new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'authorization_code',
+      code,
+      redirect_uri: redirectUri,
+      code_verifier: verifier
+    })
+
+    const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body
+    })
+    const tokenJson = await tokenRes.json()
+    if (!tokenRes.ok || !tokenJson.access_token) {
+      throw new Error(tokenJson.error_description || 'No se pudo obtener el token de Spotify.')
+    }
+
+    const cfg = getExternalApiConfig()
+    const expiresInMs = (Number(tokenJson.expires_in) || 3600) * 1000
+    saveExternalApiConfig({
+      ...cfg,
+      spotifyAccessToken: tokenJson.access_token,
+      spotifyRefreshToken: tokenJson.refresh_token || cfg.spotifyRefreshToken || '',
+      spotifyTokenExpiresAt: Date.now() + expiresInMs
+    })
+
+    sessionStorage.removeItem('spotify_pkce_verifier')
+    sessionStorage.removeItem('spotify_pkce_client_id')
+    sessionStorage.removeItem('spotify_pkce_redirect_uri')
+
+    // Obtener perfil real del usuario en Spotify
+    const meRes = await fetch('https://api.spotify.com/v1/me', {
+      headers: { Authorization: `Bearer ${tokenJson.access_token}` }
+    })
+    const me = meRes.ok ? await meRes.json() : {}
+
     return {
-      connected: true,
-      platform: 'spotify',
-      externalId: 'spotify_user_' + Math.random().toString(36).substring(2, 8)
+      accessToken: tokenJson.access_token,
+      profile: {
+        id: me.id || null,
+        displayName: me.display_name || me.email || 'Usuario Spotify',
+        email: me.email || ''
+      }
     }
+  },
+
+  async ensureValidSpotifyToken() {
+    const cfg = getExternalApiConfig()
+    if (!cfg.spotifyAccessToken) return ''
+
+    const needsRefresh =
+      cfg.spotifyRefreshToken &&
+      (!cfg.spotifyTokenExpiresAt || Date.now() >= cfg.spotifyTokenExpiresAt - 120_000)
+
+    if (!needsRefresh) return cfg.spotifyAccessToken
+
+    try {
+      const clientId = await this.getSpotifyClientId()
+      if (!clientId) return cfg.spotifyAccessToken
+      const res = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          grant_type: 'refresh_token',
+          refresh_token: cfg.spotifyRefreshToken
+        })
+      })
+      if (!res.ok) return cfg.spotifyAccessToken
+      const json = await res.json()
+      if (json.access_token) {
+        const expiresInMs = (Number(json.expires_in) || 3600) * 1000
+        saveExternalApiConfig({
+          spotifyAccessToken: json.access_token,
+          spotifyRefreshToken: json.refresh_token || cfg.spotifyRefreshToken,
+          spotifyTokenExpiresAt: Date.now() + expiresInMs
+        })
+        return json.access_token
+      }
+    } catch {
+      // ignore network error and keep current token
+    }
+    return cfg.spotifyAccessToken
+  },
+
+  async fetchMySpotifyPlaylists() {
+    const token = await this.ensureValidSpotifyToken()
+    if (!token) return []
+    const playlists = []
+    let nextUrl = 'https://api.spotify.com/v1/me/playlists?limit=50'
+    while (nextUrl) {
+      const res = await fetch(nextUrl, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) break
+      const json = await res.json()
+      for (const p of json.items || []) {
+        if (!p || !p.id) continue
+        const totalCanciones = p.tracks?.total ?? p.items?.total ?? null
+        playlists.push({
+          id: p.id,
+          nombre: p.name,
+          descripcion: p.description || '',
+          total: totalCanciones,
+          portada_url: p.images?.[0]?.url || '',
+          url: p.external_urls?.spotify || `https://open.spotify.com/playlist/${p.id}`,
+          plataforma_origen: 'spotify'
+        })
+      }
+      nextUrl = json.next || null
+    }
+    return playlists
   },
 
   /**
@@ -120,10 +301,11 @@ export const musicApiService = {
       }
     }
 
-    // 2. Si el usuario selecciona YouTube directamente, buscamos en vivo en YouTube
-    if (platform === 'youtube') {
+    // 2. Si el usuario selecciona YouTube o YouTube Music directamente, buscamos en vivo en YouTube
+    if (platform === 'youtube' || platform === 'youtube_music') {
       try {
-        const ytRes = await fetch(`/api/yt-search?q=${encodeURIComponent(cleanQuery)}&mode=search`)
+        const ytQuery = platform === 'youtube_music' ? `${cleanQuery} official audio` : cleanQuery
+        const ytRes = await fetch(`/api/yt-search?q=${encodeURIComponent(ytQuery)}&mode=search`)
         if (ytRes.ok) {
           const ytJson = await ytRes.json()
           if (Array.isArray(ytJson.items) && ytJson.items.length > 0) {
@@ -133,19 +315,24 @@ export const musicApiService = {
               const artista = parts.length > 1 ? parts[0].trim() : (v.channel || 'Artista')
               const titulo = parts.length > 1 ? parts.slice(1).join(' - ').trim() : rawTitle
               return {
-                external_id: `yt_${v.videoId}`,
+                external_id: `${platform === 'youtube_music' ? 'ytm' : 'yt'}_${v.videoId}`,
                 titulo,
                 artista,
-                album: 'YouTube Oficial',
-                genero: 'Pop',
+                album: platform === 'youtube_music' ? 'YouTube Music' : 'YouTube Oficial',
+                genero: 'Música',
                 duracion_segundos: v.durationSeconds || 215,
                 reproducciones: v.viewCount || 0,
                 portada_url: v.thumbnail,
                 audio_url: '',
-                plataforma_origen: 'youtube',
+                preview_url: null,
+                plataforma_origen: platform,
                 youtube_video_id: v.videoId,
+                ytmusic_track_id: platform === 'youtube_music' ? v.videoId : null,
                 youtube_candidates: [v.videoId],
-                external_url: `https://www.youtube.com/watch?v=${v.videoId}`
+                external_url:
+                  platform === 'youtube_music'
+                    ? `https://music.youtube.com/watch?v=${v.videoId}`
+                    : `https://www.youtube.com/watch?v=${v.videoId}`
               }
             })
           }
@@ -186,9 +373,9 @@ export const musicApiService = {
               reproducciones: 0,
               portada_url: highResCover,
               audio_url: '',
-              preview_url: track.previewUrl || null,
+              preview_url: platform === 'spotify' ? (track.previewUrl || null) : null,
               plataforma_origen: platform,
-              spotify_track_id: platform === 'spotify' ? `spotify:track:${hashId}` : null,
+              spotify_track_id: null,
               ytmusic_track_id: platform === 'youtube_music' ? `ytm_track_${hashId}` : null,
               youtube_video_id: null,
               external_url: track.trackViewUrl || null
@@ -264,11 +451,267 @@ export const musicApiService = {
     if (!cleanUrl) {
       throw new Error('Pega el enlace de tu playlist de Spotify, YouTube Music o YouTube.')
     }
-    const res = await fetch(`/api/extract-playlist?url=${encodeURIComponent(cleanUrl)}`)
+    const config = getExternalApiConfig()
+    const params = new URLSearchParams({ url: cleanUrl })
+    if (config.spotifyAccessToken) {
+      params.set('spotifyToken', config.spotifyAccessToken)
+    }
+    const res = await fetch(`/api/extract-playlist?${params.toString()}`)
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.ok || !data.playlist) {
       throw new Error(data.error || 'No se pudo extraer esa playlist. Verifica que el enlace sea público.')
     }
     return data.playlist
+  },
+
+  async getGoogleClientId() {
+    const config = getExternalApiConfig()
+    if (config.youtubeClientId && !config.youtubeClientId.startsWith('your-')) {
+      return config.youtubeClientId
+    }
+    try {
+      const res = await fetch('/api/google-config')
+      const data = await res.json().catch(() => ({}))
+      if (data?.configured && data?.clientId) {
+        saveExternalApiConfig({ youtubeClientId: data.clientId })
+        return data.clientId
+      }
+    } catch {
+      // Ignorar si no responde
+    }
+    return ''
+  },
+
+  async startGoogleYoutubeAuth(platform = 'youtube_music') {
+    const clientId = await this.getGoogleClientId()
+    if (!clientId) {
+      throw new Error(
+        'Falta configurar GOOGLE_CLIENT_ID (o VITE_YOUTUBE_CLIENT_ID) en .env / Netlify para conectar tu cuenta de Google y YouTube Music.'
+      )
+    }
+
+    const redirectUri = `${window.location.origin}/connect`
+    const scopes = [
+      'https://www.googleapis.com/auth/youtube.readonly',
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ].join(' ')
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'token',
+      scope: scopes,
+      include_granted_scopes: 'true',
+      prompt: 'consent',
+      state: `google:${platform}`
+    })
+
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+  },
+
+  async completeGoogleYoutubeCallback(hashString = '') {
+    const cleanHash = String(hashString || '').replace(/^#/, '')
+    const params = new URLSearchParams(cleanHash)
+    const accessToken = params.get('access_token')
+    const grantedScope = params.get('scope') || ''
+    const state = params.get('state') || 'google:youtube_music'
+    const platform = state.startsWith('google:') ? state.slice(7) : 'youtube_music'
+
+    if (!accessToken) {
+      throw new Error('Google no devolvió un token de acceso válido.')
+    }
+
+    if (grantedScope && !grantedScope.includes('youtube')) {
+      saveExternalApiConfig({ youtubeAccessToken: '' })
+      throw new Error(
+        'Faltó marcar el permiso de YouTube en Google. Vuelve a conectar y tilda la casilla "Ver tu cuenta de YouTube" antes de darle a Continuar.'
+      )
+    }
+
+    saveExternalApiConfig({ youtubeAccessToken: accessToken })
+
+    let profile = { id: `google_${Date.now()}`, displayName: 'Cuenta Google / YouTube', email: '' }
+    try {
+      const profileRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      })
+      if (profileRes.ok) {
+        const data = await profileRes.json()
+        profile = {
+          id: data.id || profile.id,
+          displayName: data.name || data.email || profile.displayName,
+          email: data.email || ''
+        }
+      }
+    } catch {
+      // Continuar con el perfil por defecto
+    }
+
+    return { accessToken, profile, platform }
+  },
+
+  async fetchMyYoutubePlaylists() {
+    const { youtubeAccessToken } = getExternalApiConfig()
+    if (!youtubeAccessToken) return []
+
+    const all = []
+    let pageToken = ''
+
+    do {
+      const params = new URLSearchParams({
+        part: 'snippet,contentDetails',
+        mine: 'true',
+        maxResults: '50'
+      })
+      if (pageToken) params.set('pageToken', pageToken)
+
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/playlists?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${youtubeAccessToken}` }
+      })
+
+      if (res.status === 401) {
+        saveExternalApiConfig({ youtubeAccessToken: '' })
+        return []
+      }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        const msg = errData?.error?.message || ''
+        if (res.status === 403 && msg.toLowerCase().includes('insufficient')) {
+          saveExternalApiConfig({ youtubeAccessToken: '' })
+          throw new Error(
+            'Faltó el permiso de YouTube (youtube.readonly). Haz clic en "Cambiar cuenta" y asegúrate de tildar la casilla de YouTube en la pantalla de Google (y de tenerlo agregado en Google Auth Platform → Acceso a los datos).'
+          )
+        }
+        throw new Error(msg || 'No se pudieron obtener tus playlists de YouTube / YT Music.')
+      }
+
+      const data = await res.json()
+      for (const item of data.items || []) {
+        const thumbs = item.snippet?.thumbnails || {}
+        const cover =
+          thumbs.maxres?.url || thumbs.high?.url || thumbs.medium?.url || thumbs.default?.url || ''
+        all.push({
+          id: item.id,
+          nombre: item.snippet?.title || 'Playlist de YouTube',
+          total: item.contentDetails?.itemCount ?? 0,
+          portada: cover,
+          url: `https://music.youtube.com/playlist?list=${item.id}`,
+          youtubeUrl: `https://www.youtube.com/playlist?list=${item.id}`
+        })
+      }
+      pageToken = data.nextPageToken || ''
+    } while (pageToken)
+
+    return all
+  },
+
+  async extractYoutubePlaylistWithToken(playlistMeta, platform = 'youtube_music') {
+    const { youtubeAccessToken } = getExternalApiConfig()
+    if (!youtubeAccessToken) {
+      throw new Error('Tu sesión de Google / YouTube expiró. Vuelve a vincular tu cuenta.')
+    }
+
+    const playlistId = typeof playlistMeta === 'string' ? playlistMeta : playlistMeta.id
+    const items = []
+    let pageToken = ''
+
+    do {
+      const params = new URLSearchParams({
+        part: 'snippet,contentDetails',
+        playlistId,
+        maxResults: '50'
+      })
+      if (pageToken) params.set('pageToken', pageToken)
+
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${youtubeAccessToken}` }
+      })
+
+      if (res.status === 401) {
+        saveExternalApiConfig({ youtubeAccessToken: '' })
+        throw new Error('Tu sesión de Google expiró. Vuelve a conectar tu cuenta.')
+      }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        const msg = errData?.error?.message || ''
+        if (res.status === 403 && msg.toLowerCase().includes('insufficient')) {
+          saveExternalApiConfig({ youtubeAccessToken: '' })
+          throw new Error(
+            'Faltó el permiso de YouTube (youtube.readonly). Haz clic en "Cambiar cuenta" y tilda la casilla de YouTube al autorizar.'
+          )
+        }
+        throw new Error(msg || 'No se pudieron leer las canciones de la playlist.')
+      }
+
+      const data = await res.json()
+      for (const entry of data.items || []) {
+        const snippet = entry.snippet || {}
+        const videoId = entry.contentDetails?.videoId || snippet.resourceId?.videoId || ''
+        if (!videoId) continue
+        const title = snippet.title || ''
+        if (title === 'Deleted video' || title === 'Private video') continue
+        const thumbs = snippet.thumbnails || {}
+        const portada =
+          thumbs.maxres?.url || thumbs.high?.url || thumbs.medium?.url || thumbs.default?.url || ''
+        const artista = (snippet.videoOwnerChannelTitle || 'Artista').replace(/\s*-\s*Topic$/i, '').trim()
+
+        items.push({
+          videoId,
+          titulo: title,
+          artista,
+          portada
+        })
+      }
+      pageToken = data.nextPageToken || ''
+    } while (pageToken)
+
+    // Obtener duraciones en lotes de 50
+    const durationMap = new Map()
+    for (let i = 0; i < items.length; i += 50) {
+      const batchIds = items.slice(i, i + 50).map((it) => it.videoId).join(',')
+      try {
+        const vRes = await fetch(
+          `https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${encodeURIComponent(batchIds)}`,
+          { headers: { Authorization: `Bearer ${youtubeAccessToken}` } }
+        )
+        if (vRes.ok) {
+          const vData = await vRes.json()
+          for (const v of vData.items || []) {
+            const iso = v.contentDetails?.duration || ''
+            const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/)
+            if (m) {
+              const secs =
+                Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0)
+              durationMap.set(v.id, secs)
+            }
+          }
+        }
+      } catch {
+        // Ignorar error de duración y usar fallback
+      }
+    }
+
+    const canciones = items.map((it) => ({
+      titulo: it.titulo,
+      artista: it.artista,
+      album: platform === 'youtube_music' ? 'YouTube Music' : 'YouTube',
+      duracion_seg: durationMap.get(it.videoId) || 195,
+      portada_url: it.portada,
+      youtube_video_id: it.videoId,
+      plataforma_origen: platform,
+      genero: 'Música',
+      reproducciones: 0
+    }))
+
+    return {
+      nombre: typeof playlistMeta === 'object' ? playlistMeta.nombre : 'Playlist de YouTube',
+      plataforma_origen: platform,
+      portada_url:
+        (typeof playlistMeta === 'object' && playlistMeta.portada) ||
+        canciones[0]?.portada_url ||
+        '',
+      canciones
+    }
   }
 }

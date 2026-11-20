@@ -872,6 +872,21 @@ export function useAuth() {
       saveUsersDatabase(actuales)
       usuariosDb.value = actuales
     }
+
+    try {
+      await supabase
+        .from('usuarios')
+        .update({
+          spotify_connected: Boolean(updated.spotifyConnected),
+          ytmusic_connected: Boolean(updated.ytMusicConnected)
+        })
+        .eq('id', updated.id)
+    } catch {
+      // Ignorar si está offline o en modo local
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    }
   }
 
   async function disconnectPlatform(platform = 'spotify') {
@@ -898,6 +913,21 @@ export function useAuth() {
       actuales[idx] = { ...actuales[idx], ...updated }
       saveUsersDatabase(actuales)
       usuariosDb.value = actuales
+    }
+
+    try {
+      await supabase
+        .from('usuarios')
+        .update({
+          spotify_connected: Boolean(updated.spotifyConnected),
+          ytmusic_connected: Boolean(updated.ytMusicConnected)
+        })
+        .eq('id', updated.id)
+    } catch {
+      // Ignorar si está offline o en modo local
+    }
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('gavify:library-updated'))
     }
   }
 

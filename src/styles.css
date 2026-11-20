@@ -10,7 +10,40 @@
 }
 
 * {
-    box-sizing: border-box
+    box-sizing: border-box;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(184, 223, 109, 0.22) transparent;
+}
+
+*::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+    background: #101310;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: #2b322a;
+    border-radius: 999px;
+    border: 2px solid #101310;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: rgba(184, 223, 109, 0.55);
+}
+
+*::-webkit-scrollbar-button {
+    display: none;
+}
+
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+html {
+    color-scheme: dark;
 }
 
 html,
@@ -171,8 +204,13 @@ em {
 
 .primary span,
 .spotify span:last-child {
-    margin-left: 24px;
-    font-size: 16px
+    margin-left: 0;
+    font-size: inherit;
+}
+
+.hero .primary span,
+.hero .spotify span:last-child {
+    margin-left: 10px;
 }
 
 .proof {
@@ -218,15 +256,68 @@ em {
     place-items: center
 }
 
+.vinyl-stage {
+    position: relative;
+    display: grid;
+    place-items: center;
+}
+
+.vinyl-light-wave {
+    position: absolute;
+    width: min(35vw, 410px);
+    height: min(35vw, 410px);
+    border-radius: 50%;
+    pointer-events: none;
+    border: 2px solid rgba(184, 223, 109, 0.55);
+    box-shadow: 0 0 28px rgba(184, 223, 109, 0.35);
+    opacity: 0;
+    animation: vinyl-wave-pulse 3.6s ease-out infinite;
+}
+
 .vinyl {
     width: min(35vw, 410px);
     height: min(35vw, 410px);
     border-radius: 50%;
-    background: repeating-radial-gradient(circle, #30362f 0 2px, #252b25 3px 7px);
+    background:
+      conic-gradient(
+        from 0deg,
+        transparent 0deg 55deg,
+        rgba(255, 255, 255, 0.09) 75deg,
+        transparent 95deg 235deg,
+        rgba(184, 223, 109, 0.1) 255deg,
+        transparent 275deg 360deg
+      ),
+      repeating-radial-gradient(circle, #30362f 0 2px, #252b25 3px 7px);
     box-shadow: 0 0 0 1px #596156, -25px 30px 80px #0008;
     display: grid;
     place-items: center;
-    transform: rotate(-18deg)
+    position: relative;
+    overflow: hidden;
+    animation: landing-vinyl-spin 11s linear infinite;
+}
+
+@keyframes landing-vinyl-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes vinyl-wave-pulse {
+    0% {
+        transform: scale(0.94);
+        opacity: 0.75;
+    }
+    70% {
+        transform: scale(1.18);
+        opacity: 0;
+    }
+    100% {
+        transform: scale(1.18);
+        opacity: 0;
+    }
 }
 
 .vinyl:after {
@@ -288,7 +379,21 @@ em {
 .equalizer i {
     width: 5px;
     background: var(--lime);
-    height: 30px
+    height: 30px;
+    border-radius: 999px;
+    transform-origin: bottom center;
+    animation: landing-eq-bounce 0.9s ease-in-out infinite alternate;
+}
+
+@keyframes landing-eq-bounce {
+    0% {
+        transform: scaleY(0.32);
+        opacity: 0.72;
+    }
+    100% {
+        transform: scaleY(1.05);
+        opacity: 1;
+    }
 }
 
 .equalizer i:nth-child(2) {

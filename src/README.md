@@ -41,7 +41,7 @@ En la pantalla de inicio de sesión (`/login`), se encuentran botones de **acces
 
 1. **Prueba como Usuario Común (`camila@gavify.io`):**
    - Comprueba que la barra lateral **no** muestra la opción de administrar usuarios.
-   - Si intentas escribir directamente en la barra de direcciones `http://localhost:5173/seguridad`, Vue Router Navigation Guard te redirige automáticamente al Dashboard.
+   - Si intentas escribir directamente en la barra de direcciones `http://127.0.0.1:5173/seguridad`, Vue Router Navigation Guard te redirige automáticamente al Dashboard.
 
 2. **Prueba como Administrador (`valentina@gavify.io`):**
    - Comprueba que sí aparece el panel de administración de usuarios.

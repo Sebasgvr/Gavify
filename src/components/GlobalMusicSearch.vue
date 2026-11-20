@@ -199,7 +199,21 @@ const sugerenciasBusqueda = [
   'Soda Stereo',
   'Arctic Monkeys',
   'Maroon 5',
-  'Miley Cyrus'
+  'Miley Cyrus',
+  'Bad Bunny',
+  'Taylor Swift',
+  'Imagine Dragons',
+  'Bruno Mars',
+  'Dua Lipa',
+  'Gustavo Cerati',
+  'Emilia',
+  'Feid',
+  'Quevedo',
+  'Adele',
+  'Linkin Park',
+  'Queen',
+  'Billie Eilish',
+  'Eminem'
 ]
 
 const todasSeleccionadas = computed(() => plataformasActivas.value.length === plataformasExtractor.length)

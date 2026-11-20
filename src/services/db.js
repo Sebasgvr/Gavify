@@ -32,6 +32,30 @@ function normalizePlatform(plat) {
   return 'spotify'
 }
 
+export function normalizeTrackKey(titulo = '', artista = '') {
+  const cleanText = str =>
+    String(str || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+
+  const cleanTitle = cleanText(titulo)
+    .replace(/\s*[\(\[][^)\]]*(?:feat|ft|official|video|audio|lyric|letra|remaster|live|version|edit|radio|studio|remix)[^)\]]*[\)\]]/gi, '')
+    .replace(/\s*-\s*(?:remaster(?:ed)?|studio recording|live|official|radio edit|version).*$/gi, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  const primaryArtist = cleanText(artista)
+    .split(/[,;&]| feat\.? | ft\.? /i)[0]
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  return `${cleanTitle}|${primaryArtist}`
+}
+
 // Datos iniciales para las organizaciones con IDs reales de canciones completas (solo Spotify, YT Music y YouTube)
 // Sin música ni playlists falsas pre-cargadas: cada usuario gestiona únicamente su música real
 const INITIAL_CANCIONES = []
@@ -128,18 +152,18 @@ export function validarDatosCancion(payload) {
 
   if (!titulo) {
     errores.push('El título de la canción es obligatorio.')
-  } else if (titulo.length < 2 || titulo.length > 150) {
-    errores.push('El título debe tener entre 2 y 150 caracteres.')
+  } else if (titulo.length < 1 || titulo.length > 250) {
+    errores.push('El título debe tener entre 1 y 250 caracteres.')
   }
 
   if (!artista) {
     errores.push('El nombre del artista o productor es obligatorio.')
-  } else if (artista.length < 2 || artista.length > 120) {
-    errores.push('El nombre del artista debe tener entre 2 y 120 caracteres.')
+  } else if (artista.length < 1 || artista.length > 200) {
+    errores.push('El nombre del artista debe tener entre 1 y 200 caracteres.')
   }
 
-  if (payload.album && String(payload.album).trim().length > 120) {
-    errores.push('El nombre del álbum no puede superar los 120 caracteres.')
+  if (payload.album && String(payload.album).trim().length > 200) {
+    errores.push('El nombre del álbum no puede superar los 200 caracteres.')
   }
 
   const reproducciones = Number(payload.reproducciones ?? 0)
@@ -388,8 +412,9 @@ export const dbService = {
   /**
    * Verifica si una canción está en la playlist "Tus me gusta"
    */
-  async isCancionFavorita(cancionId) {
+  async isCancionFavorita(cancionIdOrTrack) {
     try {
+      if (!cancionIdOrTrack) return false
       const user = requireActiveUser()
       const playlists = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
       const fav = playlists.find(
@@ -399,8 +424,31 @@ export const dbService = {
           (p.nombre.toLowerCase() === 'tus me gusta' || p.tipo === 'favoritos')
       )
       if (!fav) return false
+
+      const cancionId = typeof cancionIdOrTrack === 'object' ? cancionIdOrTrack.id : cancionIdOrTrack
       const rels = loadCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, INITIAL_PLAYLIST_CANCIONES)
-      return rels.some(r => r.playlist_id === fav.id && r.cancion_id === cancionId)
+      
+      if (cancionId && rels.some(r => r.playlist_id === fav.id && r.cancion_id === cancionId)) {
+        return true
+      }
+
+      // Si es un track o id externo, comparar también por título y artista en la lista de favoritos
+      if (typeof cancionIdOrTrack === 'object' && cancionIdOrTrack.titulo && cancionIdOrTrack.artista) {
+        const todas = loadCollection(STORAGE_KEYS.CANCIONES, INITIAL_CANCIONES)
+        const tMatch = (cancionIdOrTrack.titulo || '').toLowerCase().trim()
+        const aMatch = (cancionIdOrTrack.artista || '').toLowerCase().trim()
+        const matchSong = todas.find(
+          c =>
+            c.organizacion_id === user.organizacion_id &&
+            (c.titulo || '').toLowerCase().trim() === tMatch &&
+            (c.artista || '').toLowerCase().trim() === aMatch
+        )
+        if (matchSong) {
+          return rels.some(r => r.playlist_id === fav.id && r.cancion_id === matchSong.id)
+        }
+      }
+
+      return false
     } catch {
       return false
     }
@@ -434,7 +482,14 @@ export const dbService = {
    */
   async extractCancionFromApi(trackPayload, targetPlaylistId = null) {
     const user = requireActiveUser()
-    const validados = validarDatosCancion(trackPayload)
+    const sanitizedPayload = {
+      ...trackPayload,
+      titulo: String(trackPayload?.titulo || '').trim().slice(0, 250) || 'Sin título',
+      artista: String(trackPayload?.artista || '').trim().slice(0, 200) || 'Artista desconocido',
+      album: trackPayload?.album ? String(trackPayload.album).trim().slice(0, 200) : null,
+      duracion_segundos: trackPayload?.duracion_segundos ?? trackPayload?.duracion_seg ?? 180
+    }
+    const validados = validarDatosCancion(sanitizedPayload)
     const todas = loadCollection(STORAGE_KEYS.CANCIONES, INITIAL_CANCIONES)
     const plataformaNormalizada = normalizePlatform(trackPayload.plataforma_origen)
 
@@ -548,21 +603,78 @@ export const dbService = {
    * Extrae una Playlist completa con todas sus canciones desde Spotify, YT Music o YouTube
    */
   async extractPlaylistFromApi(playlistTemplate) {
-    requireActiveUser()
+    const user = requireActiveUser()
+    const nombreBuscado = (playlistTemplate.nombre || '').trim().toLowerCase()
+    const plataformaBuscada = playlistTemplate.plataforma_origen || 'spotify'
+
+    const playlists = loadCollection(STORAGE_KEYS.PLAYLISTS, INITIAL_PLAYLISTS)
+    const existente = playlists.find(
+      p =>
+        p.organizacion_id === user.organizacion_id &&
+        p.usuario_id === user.id &&
+        (p.nombre || '').trim().toLowerCase() === nombreBuscado &&
+        (p.plataforma_origen || 'spotify') === plataformaBuscada
+    )
+
+    if (existente) {
+      const yaCargadas = await this.getCancionesDePlaylist(existente.id)
+      const clavesExistentes = new Set()
+      for (const item of yaCargadas) {
+        const c = item.canciones
+        if (!c) continue
+        const clave = `${(c.titulo || '').toLowerCase().trim()}|${(c.artista || '').toLowerCase().trim()}`
+        clavesExistentes.add(clave)
+        if (c.spotify_track_id) clavesExistentes.add(c.spotify_track_id)
+        if (c.youtube_video_id) clavesExistentes.add(c.youtube_video_id)
+      }
+
+      let addedCount = 0
+      let skippedCount = 0
+
+      for (const track of playlistTemplate.canciones || []) {
+        const clave = `${(track.titulo || '').toLowerCase().trim()}|${(track.artista || '').toLowerCase().trim()}`
+        const yaEsta =
+          clavesExistentes.has(clave) ||
+          (track.spotify_track_id && clavesExistentes.has(track.spotify_track_id)) ||
+          (track.youtube_video_id && clavesExistentes.has(track.youtube_video_id))
+
+        if (yaEsta) {
+          skippedCount++
+          continue
+        }
+
+        await this.extractCancionFromApi(track, existente.id)
+        clavesExistentes.add(clave)
+        if (track.spotify_track_id) clavesExistentes.add(track.spotify_track_id)
+        if (track.youtube_video_id) clavesExistentes.add(track.youtube_video_id)
+        addedCount++
+      }
+
+      this.markPlaylistUsed(existente.id)
+      return {
+        ...existente,
+        _syncSummary: { isUpdate: true, addedCount, skippedCount }
+      }
+    }
 
     const nuevaPl = await this.createPlaylist({
       nombre: playlistTemplate.nombre,
       descripcion: playlistTemplate.descripcion,
       es_publica: true,
-      plataforma_origen: playlistTemplate.plataforma_origen || 'spotify',
+      plataforma_origen: plataformaBuscada,
       portada_url: playlistTemplate.portada_url
     })
 
+    let addedCount = 0
     for (const track of playlistTemplate.canciones || []) {
       await this.extractCancionFromApi(track, nuevaPl.id)
+      addedCount++
     }
 
-    return nuevaPl
+    return {
+      ...nuevaPl,
+      _syncSummary: { isUpdate: false, addedCount, skippedCount: 0 }
+    }
   },
 
   /**
@@ -719,7 +831,7 @@ export const dbService = {
         // Contar cuántas canciones están repetidas DENTRO de esta misma playlist
         const conteoEnEstaLista = {}
         for (const t of tracks) {
-          const clave = `${(t.titulo || '').toLowerCase().trim()}|${(t.artista || '').toLowerCase().trim()}`
+          const clave = normalizeTrackKey(t.titulo, t.artista)
           conteoEnEstaLista[clave] = (conteoEnEstaLista[clave] || 0) + 1
         }
         const repetidasMismaListaCount = Object.values(conteoEnEstaLista).filter(c => c > 1).length
@@ -935,7 +1047,7 @@ export const dbService = {
       .map((r, index) => {
         const cancion = canciones.find(c => c.id === r.cancion_id) || null
         if (!cancion) return null
-        const clave = `${(cancion.titulo || '').toLowerCase().trim()}|${(cancion.artista || '').toLowerCase().trim()}`
+        const clave = normalizeTrackKey(cancion.titulo, cancion.artista)
         const posHumana = index + 1
         if (!posicionesPorClave[clave]) {
           posicionesPorClave[clave] = []
@@ -1058,21 +1170,22 @@ export const dbService = {
     const rels = loadCollection(STORAGE_KEYS.PLAYLIST_CANCIONES, INITIAL_PLAYLIST_CANCIONES)
       .filter(r => idsPlaylistsOrg.has(r.playlist_id))
 
-    // Agrupar por cancion_id
+    // Agrupar por título + artista normalizado (detecta duplicados exactos y entre plataformas/versiones)
     const agrupadas = {}
     for (const rel of rels) {
       const cancion = mapaCanciones.get(rel.cancion_id)
       const playlist = mapaPlaylists.get(rel.playlist_id)
       if (!cancion || !playlist) continue
 
-      if (!agrupadas[cancion.id]) {
-        agrupadas[cancion.id] = {
+      const key = normalizeTrackKey(cancion.titulo, cancion.artista) || cancion.id
+      if (!agrupadas[key]) {
+        agrupadas[key] = {
           cancion_id: cancion.id,
           cancion,
           apariciones: []
         }
       }
-      agrupadas[cancion.id].apariciones.push({
+      agrupadas[key].apariciones.push({
         rel_id: rel.id,
         playlist_id: playlist.id,
         playlist_nombre: playlist.nombre,

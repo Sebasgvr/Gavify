@@ -105,18 +105,18 @@
         </div>
       </section>
 
-      <!-- Panel 2: Canciones más escuchadas y repetidas en playlists -->
+      <!-- Panel 2: Canciones más escuchadas -->
       <section class="panel">
         <div class="panel-head">
           <div>
-            <span class="tiny">MÁS ESCUCHADAS Y REPETIDAS EN PLAYLISTS</span>
-            <h3>En loop últimamente ({{ repetidas.length }} repetidas)</h3>
+            <span class="tiny">TUS CANCIONES MÁS ESCUCHADAS</span>
+            <h3>En loop últimamente</h3>
           </div>
           <router-link to="/playlists" class="text">Ver en mis Playlists</router-link>
         </div>
 
         <div v-if="!topCanciones.length" class="empty-state">
-          <p>No hay canciones en la biblioteca aún.</p>
+          <p>Todavía no reprodujiste canciones. Dale play a un tema para verlo aquí.</p>
         </div>
 
         <div v-else class="songs">
@@ -139,7 +139,7 @@
               <small>{{ song.artista }} • {{ etiquetaPlataforma(song.plataforma_origen) }}</small>
             </span>
             <span class="plays" style="display: flex; align-items: center; gap: 8px;">
-              <span>{{ song.reproducciones || 0 }} plays</span>
+              <span>{{ song.userPlays }} {{ song.userPlays === 1 ? 'vez' : 'veces' }}</span>
               <AppIcon name="play" :size="14" />
             </span>
           </div>
@@ -209,8 +209,24 @@ const COLORES_EXTRA = [
 
 async function cargarResumen() {
   try {
-    canciones.value = await dbService.getCanciones()
-    playlists.value = await dbService.getPlaylists()
+    player.refreshListeningHistoryForCurrentUser()
+    const misPlaylists = await dbService.getPlaylists()
+    playlists.value = misPlaylists
+
+    const mapaCancionesUsuario = new Map()
+    const listasItems = await Promise.all(
+      misPlaylists.map(pl => dbService.getCancionesDePlaylist(pl.id).catch(() => []))
+    )
+    for (const items of listasItems) {
+      for (const item of items) {
+        const song = item?.canciones
+        if (song?.id && !mapaCancionesUsuario.has(song.id)) {
+          mapaCancionesUsuario.set(song.id, song)
+        }
+      }
+    }
+
+    canciones.value = Array.from(mapaCancionesUsuario.values())
     repetidas.value = await dbService.getCancionesRepetidas()
   } catch (e) {
     console.warn('Error cargando resumen:', e)
@@ -218,12 +234,45 @@ async function cargarResumen() {
 }
 
 const topCanciones = computed(() => {
-  return [...canciones.value]
-    .sort((a, b) => (b.reproducciones || 0) - (a.reproducciones || 0))
-    .slice(0, 4)
+  const history = player.listeningHistory.value || []
+  if (!history.length) return []
+
+  const libraryByKey = new Map()
+  for (const song of canciones.value) {
+    const k = `${String(song.titulo || '').toLowerCase().trim()}|${String(song.artista || '').toLowerCase().trim()}`
+    if (!libraryByKey.has(k)) libraryByKey.set(k, song)
+  }
+
+  const agg = new Map()
+  for (const ev of history) {
+    const k = `${String(ev.titulo || '').toLowerCase().trim()}|${String(ev.artista || '').toLowerCase().trim()}`
+    if (!agg.has(k)) {
+      const libMatch = libraryByKey.get(k)
+      agg.set(k, {
+        ...(libMatch || ev),
+        userPlays: 0
+      })
+    }
+    const item = agg.get(k)
+    item.userPlays += 1
+    if (!item.portada_url && ev.portada_url) item.portada_url = ev.portada_url
+  }
+
+  return Array.from(agg.values())
+    .filter(song => song.userPlays > 0)
+    .sort((a, b) => b.userPlays - a.userPlays)
+    .slice(0, 5)
 })
 
-// Calcula el porcentaje real escuchado de cada género; los que no se escucharon quedan en 0%
+function formatPlays(n) {
+  const num = Number(n) || 0
+  if (num >= 1_000_000_000) return `${(num / 1_000_000_000).toFixed(2)} B plays`
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)} M plays`
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)} K plays`
+  return `${num} plays`
+}
+
+// Calcula el porcentaje real escuchado de cada género (desde historial real o biblioteca real); 0% si no se escucharon
 const generosSemanales = computed(() => {
   const mapaPesos = new Map()
 
@@ -236,19 +285,25 @@ const generosSemanales = computed(() => {
     })
   }
 
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const recentPlays = (player.listeningHistory.value || []).filter(
+    item => new Date(item.playedAt).getTime() >= weekAgo
+  )
+  const fuente = recentPlays.length > 0 ? recentPlays : canciones.value
+
   let extraIdx = 0
-  for (const c of canciones.value) {
+  for (const c of fuente) {
     const gen = (c.genero || 'Pop').trim()
-    const plays = Math.max(1, Number(c.reproducciones) || 0)
+    const peso = recentPlays.length > 0 ? 1 : 1
     if (mapaPesos.has(gen)) {
-      mapaPesos.get(gen).peso += plays
+      mapaPesos.get(gen).peso += peso
     } else {
       const extra = COLORES_EXTRA[extraIdx++ % COLORES_EXTRA.length]
       mapaPesos.set(gen, {
         nombre: gen,
         color: extra.color,
         colorLight: extra.colorLight,
-        peso: plays
+        peso
       })
     }
   }
@@ -282,14 +337,14 @@ const generosSemanales = computed(() => {
     .sort((a, b) => b.porcentaje - a.porcentaje)
 })
 
-const DIAS_BASE = [
-  { day: 'L', dayLabel: 'Lunes', baseSongs: 12 },
-  { day: 'M', dayLabel: 'Martes', baseSongs: 18 },
-  { day: 'X', dayLabel: 'Miércoles', baseSongs: 17 },
-  { day: 'J', dayLabel: 'Jueves', baseSongs: 25 },
-  { day: 'V', dayLabel: 'Viernes', baseSongs: 23 },
-  { day: 'S', dayLabel: 'Sábado', baseSongs: 25 },
-  { day: 'D', dayLabel: 'Domingo', baseSongs: 21 }
+const DIAS_SEMANA = [
+  { day: 'L', dayLabel: 'Lunes', jsDay: 1 },
+  { day: 'M', dayLabel: 'Martes', jsDay: 2 },
+  { day: 'X', dayLabel: 'Miércoles', jsDay: 3 },
+  { day: 'J', dayLabel: 'Jueves', jsDay: 4 },
+  { day: 'V', dayLabel: 'Viernes', jsDay: 5 },
+  { day: 'S', dayLabel: 'Sábado', jsDay: 6 },
+  { day: 'D', dayLabel: 'Domingo', jsDay: 0 }
 ]
 
 /**
@@ -329,27 +384,39 @@ function buildClearGenreGradient(generosActivos) {
 }
 
 const weeklyActivity = computed(() => {
-  const bonusCatalogo = Math.max(0, canciones.value.length - 4)
   const generosActivos = generosSemanales.value.filter(g => g.porcentaje > 0)
   const gradientBackground = buildClearGenreGradient(generosActivos)
 
-  const maxSongs = Math.max(...DIAS_BASE.map((d, i) => d.baseSongs + ((bonusCatalogo + i) % 4)))
+  // Contar únicamente reproducciones reales de los últimos 7 días
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+  const countsByJsDay = new Map([
+    [0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0]
+  ])
 
-  return DIAS_BASE.map((d, dayIdx) => {
-    const songsCount = canciones.value.length ? d.baseSongs + ((bonusCatalogo + dayIdx) % 4) : 0
-    const pct = maxSongs > 0 && songsCount > 0 ? Math.round((songsCount / maxSongs) * 100) : 8
+  for (const ev of player.listeningHistory.value || []) {
+    const dt = new Date(ev.playedAt)
+    if (Number.isNaN(dt.getTime()) || dt.getTime() < weekAgo) continue
+    const jsDay = dt.getDay()
+    countsByJsDay.set(jsDay, (countsByJsDay.get(jsDay) || 0) + 1)
+  }
+
+  const maxSongs = Math.max(1, ...Array.from(countsByJsDay.values()))
+
+  return DIAS_SEMANA.map(d => {
+    const songsCount = countsByJsDay.get(d.jsDay) || 0
+    const pct = songsCount > 0 ? Math.max(10, Math.round((songsCount / maxSongs) * 100)) : 4
 
     return {
       ...d,
       songsCount,
       pct,
-      gradientBackground
+      gradientBackground: songsCount > 0 ? gradientBackground : 'rgba(255, 255, 255, 0.08)'
     }
   })
 })
 
 const maxCancionesDia = computed(() => {
-  return Math.max(30, ...weeklyActivity.value.map(d => d.songsCount))
+  return Math.max(5, ...weeklyActivity.value.map(d => d.songsCount))
 })
 
 const totalCancionesSemana = computed(() => {
@@ -360,7 +427,24 @@ const statsList = computed(() => {
   const totalCanciones = canciones.value.length
   const totalPlaylists = playlists.value.length
   const totalDuplicados = repetidas.value.length
-  const topArtista = topCanciones.value[0]?.artista || 'Sin datos'
+
+  // Artista más escuchado real (desde historial de reproducción o frecuencia en biblioteca)
+  const artistCounts = new Map()
+  const history = player.listeningHistory.value || []
+  const sourceList = history.length > 0 ? history : canciones.value
+  for (const item of sourceList) {
+    const rawArtist = String(item?.artista || '').trim()
+    if (!rawArtist || rawArtist === 'Artista desconocido') continue
+    artistCounts.set(rawArtist, (artistCounts.get(rawArtist) || 0) + 1)
+  }
+  let topArtista = 'Sin reproducciones'
+  let maxArtistCount = 0
+  for (const [artistName, cnt] of artistCounts.entries()) {
+    if (cnt > maxArtistCount) {
+      maxArtistCount = cnt
+      topArtista = artistName
+    }
+  }
 
   return [
     {

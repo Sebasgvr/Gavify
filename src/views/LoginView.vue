@@ -74,29 +74,6 @@
           </button>
         </form>
 
-        <div class="auth-divider">
-          <span>6 USUARIOS EN BASE DE DATOS (1 SUPER ADMIN, 1 ADMIN, 4 PLANES)</span>
-        </div>
-
-        <div class="quick-roles-grid">
-          <button
-            v-for="cuenta in auth.usuariosDb.value"
-            :key="cuenta.id"
-            type="button"
-            class="role-login-btn"
-            @click="handleTestAccountLogin(cuenta)"
-          >
-            <div>
-              <strong>{{ cuenta.nombre }}</strong>
-              <small>
-                {{ cuenta.email }} • Rol:
-                <b>{{ etiquetaRol(cuenta.rol) }}</b> • {{ cuenta.plan }}
-              </small>
-            </div>
-            <AppIcon name="chevron-right" :size="15" />
-          </button>
-        </div>
-
         <div class="auth-footer-prompt">
           <span>¿Todavía no tienes cuenta en Gavify?</span>
           <router-link to="/register" class="accent-link">Crear cuenta de usuario</router-link>

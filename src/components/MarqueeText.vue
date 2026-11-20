@@ -50,8 +50,7 @@ function checkOverflow() {
     const containerW = containerRef.value.clientWidth
     const contentW = textRef.value.scrollWidth || textRef.value.offsetWidth
     textWidth.value = contentW
-    // Se considera desborde si el contenido supera el contenedor o si tiene más de 24 caracteres en espacios pequeños
-    isOverflowing.value = contentW > containerW + 4 || (props.text && props.text.length > 25 && containerW < 220)
+    isOverflowing.value = containerW > 0 && contentW > containerW + 2
   })
 }
 
@@ -97,11 +96,13 @@ onBeforeUnmount(() => {
 <style scoped>
 .marquee-container {
   display: block;
+  min-width: 0;
   max-width: 100%;
   width: 100%;
   overflow: hidden;
   white-space: nowrap;
   position: relative;
+  contain: layout paint;
 }
 
 .marquee-container.is-overflowing {

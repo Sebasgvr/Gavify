@@ -112,6 +112,25 @@
       <path d="M21 13v2a4 4 0 0 1-4 4H3" />
     </template>
 
+    <!-- Repeat One (Repetir el mismo tema) -->
+    <template v-else-if="name === 'repeat-one'">
+      <polyline points="17 1 21 5 17 9" />
+      <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+      <polyline points="7 23 3 19 7 15" />
+      <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+      <text x="12" y="15" font-size="8.5" font-weight="900" fill="currentColor" text-anchor="middle" stroke="none">1</text>
+    </template>
+
+    <!-- Queue / Fila de reproducción -->
+    <template v-else-if="name === 'queue' || name === 'list-music'">
+      <line x1="8" y1="6" x2="21" y2="6" stroke-width="2" />
+      <line x1="8" y1="12" x2="21" y2="12" stroke-width="2" />
+      <line x1="8" y1="18" x2="16" y2="18" stroke-width="2" />
+      <polygon points="3 4 3 8 6 6" fill="currentColor" stroke="none" />
+      <polygon points="3 10 3 14 6 12" fill="currentColor" stroke="none" />
+      <polygon points="3 16 3 20 6 18" fill="currentColor" stroke="none" />
+    </template>
+
     <!-- Volume High -->
     <template v-else-if="name === 'volume'">
       <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
@@ -263,10 +282,20 @@
       <line x1="3" y1="21" x2="10" y2="14" />
     </template>
 
-    <!-- Fire / Flame -->
+    <!-- Fire / Flame (mismo icono que la playlist Tus me gusta) -->
     <template v-else-if="name === 'fire' || name === 'flame'">
       <path
-        d="M12 2c.7 3.2-1.1 5.1-2.6 6.8C8 10.3 7 11.7 7 13.8A5 5 0 0 0 12 19a5 5 0 0 0 5-5c0-2.8-1.5-4.9-3-6.7-.4 1.6-1.3 2.5-2.1 3.1.2-2.7.5-5.6.1-8.4z"
+        d="M12.2 2.2c.8 3.1-.9 5-2.5 6.7C8.2 10.5 7 12 7 14.3A5 5 0 0 0 12 19.3a5 5 0 0 0 5-5c0-2.9-1.6-5.1-3.1-6.9-.4 1.6-1.3 2.5-2.1 3.1.2-2.7.7-5.5.4-8.3z"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+      />
+    </template>
+
+    <!-- Fire Filled (Fueguito marcado, mismo icono que Tus me gusta) -->
+    <template v-else-if="name === 'fire-filled' || name === 'flame-filled'">
+      <path
+        d="M12.2 2.2c.8 3.1-.9 5-2.5 6.7C8.2 10.5 7 12 7 14.3A5 5 0 0 0 12 19.3a5 5 0 0 0 5-5c0-2.9-1.6-5.1-3.1-6.9-.4 1.6-1.3 2.5-2.1 3.1.2-2.7.7-5.5.4-8.3z"
         fill="currentColor"
         stroke="none"
       />

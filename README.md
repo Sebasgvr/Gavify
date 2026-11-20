@@ -111,7 +111,7 @@ npm run dev
 
 Abre tu navegador en:
 ```text
-http://localhost:5173
+http://127.0.0.1:5173
 ```
 
 ---

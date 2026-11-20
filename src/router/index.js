@@ -9,6 +9,7 @@ import RepeatedView from '@/views/RepeatedView.vue'
 import MusicaView from '@/views/MusicaView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
 import RolesTestView from '@/views/RolesTestView.vue'
+import PrivacyView from '@/views/PrivacyView.vue'
 import { useAuth } from '@/services/auth'
 import { registrarEventoSeguridad } from '@/services/db'
 
@@ -17,6 +18,13 @@ const routes = [
     path: '/',
     name: 'home',
     component: HomeView
+  },
+  {
+    path: '/privacy',
+    alias: '/privacidad',
+    name: 'privacy',
+    component: PrivacyView,
+    meta: { title: 'Política de Privacidad' }
   },
   {
     path: '/login',
@@ -32,12 +40,6 @@ const routes = [
     meta: { guestOnly: true }
   },
   {
-    path: '/connect',
-    name: 'connect',
-    component: ConnectView,
-    meta: { requiresAuth: true, title: 'Apps Conectadas' }
-  },
-  {
     path: '/dashboard',
     alias: '/inicio',
     component: DashboardLayout,
@@ -48,6 +50,12 @@ const routes = [
         name: 'dashboard',
         component: DashboardView,
         meta: { title: 'Tu resumen', requiresAuth: true }
+      },
+      {
+        path: '/connect',
+        name: 'connect',
+        component: ConnectView,
+        meta: { title: 'Apps Conectadas', requiresAuth: true }
       },
       {
         path: '/musica',

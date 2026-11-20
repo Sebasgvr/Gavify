@@ -192,7 +192,6 @@ function abrirModalAgregar(track) {
 
 function onCancionAgregada({ track, playlist }) {
   mensaje.value = `✓ "${track.titulo}" guardada en "${playlist.nombre}" y sincronizada en la base de datos.`
-  cargarCanciones()
 }
 
 // Filtros, Búsqueda y Ordenamiento
@@ -300,7 +299,21 @@ const sugerenciasBusqueda = [
   'Soda Stereo',
   'Arctic Monkeys',
   'Maroon 5',
-  'Miley Cyrus'
+  'Miley Cyrus',
+  'Bad Bunny',
+  'Taylor Swift',
+  'Imagine Dragons',
+  'Bruno Mars',
+  'Dua Lipa',
+  'Gustavo Cerati',
+  'Emilia',
+  'Feid',
+  'Quevedo',
+  'Adele',
+  'Linkin Park',
+  'Queen',
+  'Billie Eilish',
+  'Eminem'
 ]
 
 // Modales de Detalle y Confirmación
@@ -660,13 +673,11 @@ function cancelarEdicion() {
 watch(
   () => [auth.currentUser.value?.id, auth.currentUser.value?.organizacion_id],
   () => {
-    mostrarFormulario.value = false
-    cargarCanciones()
+    limpiarBusqueda()
   }
 )
 
 onMounted(() => {
-  cargarCanciones()
   ejecutarBusquedaApi()
 })
 </script>

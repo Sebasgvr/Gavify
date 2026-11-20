@@ -21,7 +21,8 @@ export async function handler(event) {
 
     const spMatch = targetUrl.match(/open\.spotify\.com\/(?:intl-[a-z]+\/)?playlist\/([a-zA-Z0-9]+)/)
     if (spMatch && spMatch[1]) {
-      const playlist = await extractSpotifyPlaylistFromEmbed(spMatch[1])
+      const spotifyToken = event.queryStringParameters?.spotifyToken || ''
+      const playlist = await extractSpotifyPlaylistFromEmbed(spMatch[1], spotifyToken)
       return {
         statusCode: 200,
         headers,

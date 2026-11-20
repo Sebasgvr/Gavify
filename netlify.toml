@@ -19,6 +19,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/spotify-config"
+  to = "/.netlify/functions/spotify-config"
+  status = 200
+
+[[redirects]]
+  from = "/api/google-config"
+  to = "/.netlify/functions/google-config"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -1,5 +1,44 @@
 const ytSearchCache = new Map()
 const trackStatsCache = new Map()
+let spotifyAppTokenCache = { token: '', expiresAt: 0 }
+
+async function getAutomaticSpotifyToken() {
+  const now = Date.now()
+  if (spotifyAppTokenCache.token && spotifyAppTokenCache.expiresAt > now) {
+    return spotifyAppTokenCache.token
+  }
+
+  const clientId = (process.env.SPOTIFY_CLIENT_ID || process.env.VITE_SPOTIFY_CLIENT_ID || '').trim()
+  const clientSecret = (process.env.SPOTIFY_CLIENT_SECRET || process.env.VITE_SPOTIFY_CLIENT_SECRET || '').trim()
+  if (!clientId || !clientSecret || clientId === 'your-spotify-client-id') {
+    return ''
+  }
+
+  try {
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64')
+    const res = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basic}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: 'grant_type=client_credentials'
+    })
+    if (!res.ok) return ''
+    const data = await res.json()
+    if (data?.access_token) {
+      const ttlMs = Math.max(60, (Number(data.expires_in) || 3600) - 60) * 1000
+      spotifyAppTokenCache = {
+        token: data.access_token,
+        expiresAt: now + ttlMs
+      }
+      return data.access_token
+    }
+  } catch {
+    // Fallback al embed público si falla
+  }
+  return ''
+}
 
 export function parseDurationToSeconds(durationText = '') {
   if (!durationText) return 215
@@ -159,6 +198,26 @@ export async function resolveRealTrackPlays({ query = '', platform = 'spotify', 
   return count
 }
 
+async function isVideoEmbeddable(videoId) {
+  if (!videoId) return false
+  try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 2000)
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`,
+      {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      }
+    )
+    clearTimeout(timer)
+    if (res.status === 401 || res.status === 403 || res.status === 404) return false
+    return true
+  } catch {
+    return true
+  }
+}
+
 export async function searchYouTubeInnerTube(rawQuery, mode = 'lyrics') {
   const clean = String(rawQuery || '').trim()
   if (!clean) return []
@@ -292,7 +351,15 @@ export async function searchYouTubeInnerTube(rawQuery, mode = 'lyrics') {
     videos.sort((a, b) => Number(b.isEmbedFriendly) - Number(a.isEmbedFriendly))
   }
 
-  const result = mode === 'lyrics' ? videos.slice(0, 10) : videos
+  // Pre-filtrar videos que permiten reproducción embebida (evita Error 101/150 en el reproductor)
+  const checkLimit = mode === 'lyrics' ? 10 : 12
+  const head = videos.slice(0, checkLimit)
+  const tail = videos.slice(checkLimit)
+  const checks = await Promise.all(head.map(v => isVideoEmbeddable(v.videoId)))
+  const embeddableHead = head.filter((_, idx) => checks[idx])
+  const filteredVideos = embeddableHead.length > 0 ? [...embeddableHead, ...tail] : videos
+
+  const result = mode === 'lyrics' ? filteredVideos.slice(0, 10) : filteredVideos
   ytSearchCache.set(cacheKey, result)
   return result
 }
@@ -342,7 +409,67 @@ async function resolveSpotifyTrackCover(track, fallbackCover) {
   return fallbackCover
 }
 
-export async function extractSpotifyPlaylistFromEmbed(playlistId) {
+export async function extractSpotifyPlaylistFromEmbed(playlistId, spotifyToken = '') {
+  // 1. Token automático del servidor (Client Credentials) o token OAuth del usuario: pagina TODAS las canciones sin límite
+  const effectiveToken = (spotifyToken || '').trim() || (await getAutomaticSpotifyToken())
+  if (effectiveToken) {
+    const headers = { Authorization: `Bearer ${effectiveToken}` }
+    const plRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}`, { headers })
+    if (plRes.status === 401 && spotifyToken) {
+      throw new Error(
+        'Tu sesión de Spotify expiró (dura 1 hora). Haz clic en "Re-conectar Spotify" para renovarla y extraer todas las canciones.'
+      )
+    }
+    if (plRes.ok) {
+      const plData = await plRes.json()
+      const coverUrl =
+        plData?.images?.[0]?.url ||
+        'https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17?w=400&auto=format&fit=crop&q=80'
+      const canciones = []
+      let nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/items?limit=100&offset=0`
+      let usedFallbackTracksEndpoint = false
+
+      while (nextUrl) {
+        let pageRes = await fetch(nextUrl, { headers })
+        if (!pageRes.ok && !usedFallbackTracksEndpoint) {
+          usedFallbackTracksEndpoint = true
+          nextUrl = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100&offset=0`
+          pageRes = await fetch(nextUrl, { headers })
+        }
+        if (!pageRes.ok) break
+        const pageJson = await pageRes.json()
+        for (const item of pageJson.items || []) {
+          const t = item?.track || item?.item
+          if (!t || !t.name) continue
+          canciones.push({
+            titulo: t.name,
+            artista: (t.artists || []).map(a => a.name).join(', ') || 'Artista Spotify',
+            album: t.album?.name || plData.name || 'Spotify',
+            genero: 'Pop',
+            duracion_segundos: Math.max(30, Math.round((t.duration_ms || 200000) / 1000)),
+            reproducciones: 0,
+            plataforma_origen: 'spotify',
+            spotify_track_id: t.uri || `spotify:track:${t.id}`,
+            portada_url: t.album?.images?.[0]?.url || coverUrl,
+            audio_url: ''
+          })
+        }
+        nextUrl = pageJson.next || null
+      }
+      if (canciones.length > 0) {
+        return {
+          externalId: `sp_ext_${playlistId}`,
+          nombre: plData.name || 'Playlist importada de Spotify',
+          descripcion: `Extraída completa desde Spotify (${canciones.length} canciones)`,
+          plataforma_origen: 'spotify',
+          portada_url: coverUrl,
+          canciones
+        }
+      }
+    }
+  }
+
+  // 2. Fallback público vía embed (hasta 100 pistas públicas si no hay token OAuth)
   const res = await fetch(`https://open.spotify.com/embed/playlist/${playlistId}`, {
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -445,11 +572,52 @@ function collectYoutubePlaylistNodes(rootJson, isYtMusic, headerTitle, seenIds) 
           audio_url: ''
         })
       }
+    } else if (node.musicResponsiveListItemRenderer) {
+      const m = node.musicResponsiveListItemRenderer
+      const videoId =
+        m.playlistItemData?.videoId ||
+        m.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId
+      if (videoId && !seenIds.has(videoId)) {
+        seenIds.add(videoId)
+        const flexCols = m.flexColumns || []
+        const titleRuns = flexCols[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || []
+        const artistRuns = flexCols[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || []
+        const durRuns = m.fixedColumns?.[0]?.musicResponsiveListItemFixedColumnRenderer?.text?.runs || []
+
+        const titulo = titleRuns.map(r => r.text).join('').trim() || 'Canción'
+        const artistaRaw = artistRuns
+          .map(r => r.text)
+          .join('')
+          .split('•')[0]
+          .trim()
+        const artista = artistaRaw || 'Artista YouTube Music'
+        const durText = durRuns.map(r => r.text).join('').trim()
+        const durSecs = parseDurationToSeconds(durText)
+        const thumb =
+          m.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)?.[0]?.url ||
+          `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+
+        videos.push({
+          titulo,
+          artista,
+          album: headerTitle,
+          genero: 'Pop',
+          duracion_segundos: durSecs,
+          reproducciones: 0,
+          plataforma_origen: isYtMusic ? 'youtube_music' : 'youtube',
+          youtube_video_id: videoId,
+          youtube_candidates: [videoId],
+          portada_url: thumb,
+          audio_url: ''
+        })
+      }
     } else if (
       node.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token &&
       !nextContinuation
     ) {
       nextContinuation = node.continuationItemRenderer.continuationEndpoint.continuationCommand.token
+    } else if (node.nextContinuationData?.continuation && !nextContinuation) {
+      nextContinuation = node.nextContinuationData.continuation
     } else {
       const vals = Object.values(node)
       for (let i = vals.length - 1; i >= 0; i--) {
@@ -461,17 +629,30 @@ function collectYoutubePlaylistNodes(rootJson, isYtMusic, headerTitle, seenIds) 
   return { videos, nextContinuation }
 }
 
-export async function extractYoutubePlaylistInnerTube(listId, isYtMusic = false) {
-  const ytContext = {
-    client: {
-      clientName: 'WEB',
-      clientVersion: '2.20240726.00.00',
-      hl: 'es',
-      gl: 'AR'
-    }
-  }
+async function fetchYoutubeBrowsePlaylist(listId, isYtMusic, useRemixEndpoint) {
+  const endpoint = useRemixEndpoint
+    ? 'https://music.youtube.com/youtubei/v1/browse?prettyPrint=false'
+    : 'https://www.youtube.com/youtubei/v1/browse?prettyPrint=false'
 
-  const res = await fetch('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+  const ytContext = useRemixEndpoint
+    ? {
+        client: {
+          clientName: 'WEB_REMIX',
+          clientVersion: '1.20240726.01.00',
+          hl: 'es',
+          gl: 'AR'
+        }
+      }
+    : {
+        client: {
+          clientName: 'WEB',
+          clientVersion: '2.20240726.00.00',
+          hl: 'es',
+          gl: 'AR'
+        }
+      }
+
+  const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -483,12 +664,12 @@ export async function extractYoutubePlaylistInnerTube(listId, isYtMusic = false)
     })
   })
 
-  if (!res.ok) {
-    throw new Error('No se pudo conectar con YouTube para leer esa playlist.')
-  }
+  if (!res.ok) return null
   const json = await res.json()
 
   const headerTitle =
+    json?.header?.musicDetailHeaderRenderer?.title?.runs?.map(r => r.text).join('') ||
+    json?.header?.musicResponsiveHeaderRenderer?.title?.runs?.map(r => r.text).join('') ||
     json?.header?.playlistHeaderRenderer?.title?.simpleText ||
     json?.metadata?.playlistMetadataRenderer?.title ||
     (isYtMusic ? 'Playlist de YouTube Music' : 'Playlist de YouTube')
@@ -499,10 +680,10 @@ export async function extractYoutubePlaylistInnerTube(listId, isYtMusic = false)
   let token = firstPage.nextContinuation
   let pages = 0
 
-  while (token && pages < 5) {
+  while (token && pages < 50) {
     pages++
     try {
-      const contRes = await fetch('https://www.youtube.com/youtubei/v1/browse?prettyPrint=false', {
+      const contRes = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -520,16 +701,27 @@ export async function extractYoutubePlaylistInnerTube(listId, isYtMusic = false)
     }
   }
 
-  if (!videos.length) {
+  return { headerTitle, videos }
+}
+
+export async function extractYoutubePlaylistInnerTube(listId, isYtMusic = false) {
+  let result = null
+  if (isYtMusic) {
+    result = await fetchYoutubeBrowsePlaylist(listId, true, true)
+  }
+  if (!result || !result.videos.length) {
+    result = await fetchYoutubeBrowsePlaylist(listId, isYtMusic, false)
+  }
+  if (!result || !result.videos.length) {
     throw new Error('No se encontraron videos públicos en esa playlist. Asegúrate de que no sea privada.')
   }
 
   return {
     externalId: `yt_ext_${listId}`,
-    nombre: headerTitle,
-    descripcion: `Extraída desde ${isYtMusic ? 'YouTube Music' : 'YouTube'} (${videos.length} pistas)`,
+    nombre: result.headerTitle,
+    descripcion: `Extraída desde ${isYtMusic ? 'YouTube Music' : 'YouTube'} (${result.videos.length} pistas)`,
     plataforma_origen: isYtMusic ? 'youtube_music' : 'youtube',
-    portada_url: videos[0]?.portada_url || '',
-    canciones: videos
+    portada_url: result.videos[0]?.portada_url || '',
+    canciones: result.videos
   }
 }

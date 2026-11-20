@@ -257,7 +257,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/AppIcon.vue'
 import FavoritosArtwork from '@/components/FavoritosArtwork.vue'
@@ -360,8 +360,17 @@ watch(
   }
 )
 
+function onLibraryUpdated() {
+  cargarPlaylistsRecientes()
+}
+
 onMounted(() => {
   cargarPlaylistsRecientes()
+  window.addEventListener('gavify:library-updated', onLibraryUpdated)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('gavify:library-updated', onLibraryUpdated)
 })
 </script>
 
@@ -504,7 +513,21 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+.recent-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.recent-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
 }
 
 .recent-pl-item {

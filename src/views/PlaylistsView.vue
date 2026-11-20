@@ -1251,19 +1251,23 @@ function reproducirCancion(cancion) {
 
 function reproducirCancionDeLista(cancion) {
   if (!cancion) return
-  const listaCompleta = cancionesEnPlaylist.value.map(i => i.canciones).filter(Boolean)
-  player.playTrack(cancion, listaCompleta)
+  const listaCompleta = cancionesFiltradasEnPlaylist.value.map(i => i.canciones).filter(Boolean)
+  player.playTrack(cancion, listaCompleta.length ? listaCompleta : cancionesEnPlaylist.value.map(i => i.canciones).filter(Boolean))
 }
 
 function reproducirTodaLaPlaylist() {
   if (!cancionesEnPlaylist.value.length) return
-  const listaCompleta = cancionesEnPlaylist.value.map(i => i.canciones).filter(Boolean)
+  const listaCompleta = (cancionesFiltradasEnPlaylist.value.length ? cancionesFiltradasEnPlaylist.value : cancionesEnPlaylist.value)
+    .map(i => i.canciones)
+    .filter(Boolean)
   player.playTrack(listaCompleta[0], listaCompleta)
 }
 
 function reproducirAleatoria() {
   if (!cancionesEnPlaylist.value.length) return
-  const listaCompleta = cancionesEnPlaylist.value.map(i => i.canciones).filter(Boolean)
+  const listaCompleta = (cancionesFiltradasEnPlaylist.value.length ? cancionesFiltradasEnPlaylist.value : cancionesEnPlaylist.value)
+    .map(i => i.canciones)
+    .filter(Boolean)
   if (!player.isShuffle.value) {
     player.toggleShuffle()
   }
@@ -2555,13 +2559,16 @@ onMounted(() => {
 }
 
 .track-name-marquee-wrap {
+  flex: 1;
   min-width: 0;
-  max-width: 320px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .track-artist-marquee-wrap {
   min-width: 0;
-  max-width: 240px;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .picker-actions {
@@ -2625,6 +2632,7 @@ onMounted(() => {
 
 .spotify-track-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   text-align: left;
 }
@@ -2758,6 +2766,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .track-cover-sm {
@@ -2776,17 +2787,22 @@ onMounted(() => {
 }
 
 .track-title-stack {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .track-name-line {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
 }
 
 .track-name {

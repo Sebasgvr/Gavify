@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { getExternalApiConfig, musicApiService } from './musicApis'
 
 // Diccionario instantáneo de respaldo para canciones conocidas (Video oficial + alternativas embebibles)
 const KNOWN_SONG_CANDIDATES = {
@@ -21,8 +22,66 @@ const KNOWN_SONG_CANDIDATES = {
 
 const SAVED_SONGS_KEY = 'gavify_saved_songs_v1'
 const PLAYER_STATE_KEY = 'gavify_player_state_v1'
+const LISTENING_HISTORY_PREFIX = 'gavify_listening_history'
 const candidateMemoryCache = new Map()
 const lyricsMemoryCache = new Map()
+
+function getListeningHistoryKey() {
+  try {
+    const rawUser = localStorage.getItem('gavify_current_user')
+    const user = rawUser ? JSON.parse(rawUser) : null
+    const userId = user?.id ? String(user.id) : 'anon'
+    return `${LISTENING_HISTORY_PREFIX}_${userId}`
+  } catch {
+    return `${LISTENING_HISTORY_PREFIX}_anon`
+  }
+}
+
+function loadListeningHistory() {
+  try {
+    const raw = localStorage.getItem(getListeningHistoryKey())
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+const listeningHistory = ref(loadListeningHistory())
+
+function refreshListeningHistoryForCurrentUser() {
+  listeningHistory.value = loadListeningHistory()
+}
+
+function recordListeningEvent(track) {
+  if (!track || !track.titulo) return
+  try {
+    const key = getListeningHistoryKey()
+    const current = loadListeningHistory()
+    const entry = {
+      id: track.id || track.external_id || `${track.titulo}_${track.artista}`,
+      titulo: track.titulo,
+      artista: track.artista || 'Artista',
+      genero: track.genero || 'Pop',
+      portada_url: track.portada_url || '',
+      plataforma_origen: track.plataforma_origen || 'spotify',
+      duracion_segundos: Number(track.duracion_segundos) || 215,
+      spotify_track_id: track.spotify_track_id || null,
+      youtube_video_id: track.youtube_video_id || null,
+      external_id: track.external_id || null,
+      external_url: track.external_url || null,
+      playedAt: new Date().toISOString()
+    }
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+    const updated = [entry, ...current]
+      .filter(item => new Date(item.playedAt).getTime() >= cutoff)
+      .slice(0, 500)
+    localStorage.setItem(key, JSON.stringify(updated))
+    listeningHistory.value = updated
+  } catch {
+    // ignore storage quota
+  }
+}
 
 function loadSavedPlayerState() {
   try {
@@ -49,6 +108,7 @@ function savePlayerState() {
         duration: Number(duration.value) || Number(currentTrack.value?.duracion_segundos) || 215,
         isShuffle: isShuffle.value,
         isRepeat: isRepeat.value,
+        isRepeatOne: isRepeatOne.value,
         volume: volume.value,
         isMuted: isMuted.value
       })
@@ -84,7 +144,11 @@ const currentIndex = ref(typeof _restoredState?.currentIndex === 'number' ? _res
 const isPlaying = ref(false)
 const isLoadingStream = ref(false)
 const isShuffle = ref(Boolean(_restoredState?.isShuffle))
+const shuffleOrder = ref([])
 const isRepeat = ref(Boolean(_restoredState?.isRepeat))
+const isRepeatOne = ref(Boolean(_restoredState?.isRepeatOne))
+const showQueue = ref(false)
+const isQueueExpanded = ref(false)
 const volume = ref(typeof _restoredState?.volume === 'number' ? _restoredState.volume : 0.85)
 const isMuted = ref(Boolean(_restoredState?.isMuted))
 const currentTime = ref(Number(_restoredState?.currentTime) || 0)
@@ -104,15 +168,345 @@ const isLoadingLyrics = ref(false)
 const plainLyrics = ref('')
 const syncedLyrics = ref([]) // [{ time: number, text: string }]
 
-const activeEngine = ref('youtube') // 'youtube' | 'html5'
+const activeEngine = ref('youtube') // 'youtube' | 'html5' | 'spotify'
 
 let audioInstance = null
 let ytPlayer = null
 let ytApiReadyPromise = null
 let ytTimeInterval = null
+let streamWatchdogTimer = null
 let currentCandidateIds = []
 let currentCandidateIndex = 0
 let activePlayRequestId = 0
+
+// Spotify Web Playback SDK (reproducción directa para cuentas Spotify Premium)
+let spotifyPlayer = null
+let spotifyDeviceId = ''
+let spotifyReadyPromise = null
+let spotifyPremiumBlocked = false
+let spotifyTimeInterval = null
+let lastSpotifyPositionMs = 0
+let lastSpotifyTokenUsed = ''
+
+function resetSpotifySdkSession() {
+  stopSpotifyTimePolling()
+  if (spotifyPlayer && typeof spotifyPlayer.disconnect === 'function') {
+    try {
+      spotifyPlayer.disconnect()
+    } catch {}
+  }
+  spotifyPlayer = null
+  spotifyDeviceId = ''
+  spotifyReadyPromise = null
+  spotifyPremiumBlocked = false
+  lastSpotifyPositionMs = 0
+}
+
+function extractSpotifyTrackId(track) {
+  if (!track) return ''
+  const rawId = String(track.spotify_track_id || '').trim()
+  if (rawId) {
+    const uriMatch = rawId.match(/spotify:track:([a-zA-Z0-9]{22})/)
+    if (uriMatch) return uriMatch[1]
+    if (/^[a-zA-Z0-9]{22}$/.test(rawId)) return rawId
+  }
+  const ext = String(track.external_id || '').trim()
+  if (ext.startsWith('spotify_') && /^[a-zA-Z0-9]{22}$/.test(ext.slice(8))) {
+    return ext.slice(8)
+  }
+  const url = String(track.external_url || '').trim()
+  const urlMatch = url.match(/open\.spotify\.com\/track\/([a-zA-Z0-9]{22})/)
+  return urlMatch ? urlMatch[1] : ''
+}
+
+async function resolveSpotifyTrackIdOnTheFly(track, token) {
+  const existing = extractSpotifyTrackId(track)
+  if (existing) return existing
+  if (!token || !track?.titulo) return ''
+  try {
+    const q = `track:${track.titulo} artist:${track.artista || ''}`.trim()
+    const res = await fetch(
+      `https://api.spotify.com/v1/search?type=track&limit=1&q=${encodeURIComponent(q)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!res.ok) return ''
+    const data = await res.json()
+    const foundId = data?.tracks?.items?.[0]?.id || ''
+    if (foundId) {
+      track.spotify_track_id = `spotify:track:${foundId}`
+    }
+    return foundId
+  } catch {
+    return ''
+  }
+}
+
+function startSpotifyTimePolling() {
+  if (spotifyTimeInterval) clearInterval(spotifyTimeInterval)
+  spotifyTimeInterval = setInterval(() => {
+    if (activeEngine.value === 'spotify' && isPlaying.value) {
+      currentTime.value = Math.min(duration.value || 360, (currentTime.value || 0) + 0.5)
+    }
+  }, 500)
+}
+
+function stopSpotifyTimePolling() {
+  if (spotifyTimeInterval) {
+    clearInterval(spotifyTimeInterval)
+    spotifyTimeInterval = null
+  }
+}
+
+function ensureSpotifyPlayer() {
+  if (typeof window === 'undefined') return Promise.resolve('')
+  const token = getExternalApiConfig().spotifyAccessToken
+  if (token !== lastSpotifyTokenUsed) {
+    resetSpotifySdkSession()
+    lastSpotifyTokenUsed = token || ''
+  }
+  if (!token || spotifyPremiumBlocked) return Promise.resolve('')
+  if (spotifyPlayer && spotifyDeviceId) return Promise.resolve(spotifyDeviceId)
+  if (spotifyReadyPromise) return spotifyReadyPromise
+
+  spotifyReadyPromise = new Promise(resolve => {
+    const timeout = setTimeout(() => {
+      resolve(spotifyDeviceId || '')
+    }, 8000)
+
+    const initSdk = () => {
+      if (!window.Spotify?.Player) {
+        clearTimeout(timeout)
+        resolve('')
+        return
+      }
+      spotifyPlayer = new window.Spotify.Player({
+        name: 'Gavify Web Player',
+        getOAuthToken: cb => {
+          cb(getExternalApiConfig().spotifyAccessToken || '')
+        },
+        volume: isMuted.value ? 0 : volume.value
+      })
+
+      spotifyPlayer.addListener('ready', ({ device_id }) => {
+        spotifyDeviceId = device_id
+        clearTimeout(timeout)
+        resolve(device_id)
+      })
+
+      spotifyPlayer.addListener('not_ready', () => {
+        spotifyDeviceId = ''
+      })
+
+      spotifyPlayer.addListener('account_error', () => {
+        // Cuenta Spotify gratuita: el SDK exige Premium
+        spotifyPremiumBlocked = true
+        spotifyDeviceId = ''
+        clearTimeout(timeout)
+        resolve('')
+      })
+
+      spotifyPlayer.addListener('authentication_error', () => {
+        spotifyDeviceId = ''
+        clearTimeout(timeout)
+        resolve('')
+      })
+
+      spotifyPlayer.addListener('player_state_changed', state => {
+        if (!state || activeEngine.value !== 'spotify') return
+        const posMs = Number(state.position) || 0
+        const durMs = Number(state.duration) || 0
+        currentTime.value = posMs / 1000
+        if (durMs > 0) duration.value = durMs / 1000
+
+        const ended =
+          state.paused &&
+          posMs === 0 &&
+          lastSpotifyPositionMs > 1500 &&
+          !state.loading
+        lastSpotifyPositionMs = posMs
+
+        if (ended) {
+          isPlaying.value = false
+          handleTrackEnded()
+          return
+        }
+
+        isPlaying.value = !state.paused
+        isLoadingStream.value = Boolean(state.loading)
+      })
+
+      spotifyPlayer.connect().then(ok => {
+        if (!ok) {
+          clearTimeout(timeout)
+          resolve('')
+        }
+      })
+    }
+
+    if (window.Spotify?.Player) {
+      initSdk()
+    } else {
+      const prevReady = window.onSpotifyWebPlaybackSDKReady
+      window.onSpotifyWebPlaybackSDKReady = () => {
+        if (typeof prevReady === 'function') prevReady()
+        initSdk()
+      }
+      if (!document.getElementById('gavify-spotify-sdk-script')) {
+        const script = document.createElement('script')
+        script.id = 'gavify-spotify-sdk-script'
+        script.src = 'https://sdk.scdn.co/spotify-player.js'
+        script.async = true
+        document.head.appendChild(script)
+      }
+    }
+  })
+
+  return spotifyReadyPromise
+}
+
+async function playSpotifyTrack(track, requestId) {
+  const token = (await musicApiService.ensureValidSpotifyToken()) || getExternalApiConfig().spotifyAccessToken
+  if (token !== lastSpotifyTokenUsed) {
+    resetSpotifySdkSession()
+    lastSpotifyTokenUsed = token || ''
+  }
+  if (!token || spotifyPremiumBlocked) return false
+
+  const trackId = await resolveSpotifyTrackIdOnTheFly(track, token)
+  if (requestId !== activePlayRequestId) return true
+  if (!trackId) return false
+
+  const deviceId = await ensureSpotifyPlayer()
+  if (requestId !== activePlayRequestId) return true
+  if (!deviceId) return false
+
+  try {
+    if (typeof spotifyPlayer?.activateElement === 'function') {
+      try {
+        await spotifyPlayer.activateElement()
+      } catch {}
+    }
+
+    const triggerPlay = () =>
+      fetch(`https://api.spotify.com/v1/me/player/play?device_id=${encodeURIComponent(deviceId)}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          uris: [`spotify:track:${trackId}`]
+        })
+      })
+
+    let res = await triggerPlay()
+    if (res.status === 404) {
+      // El dispositivo recién conectado puede tardar unos ms en registrarse en Spotify
+      await new Promise(r => setTimeout(r, 750))
+      if (requestId !== activePlayRequestId) return true
+      res = await triggerPlay()
+    }
+
+    if (res.status === 403) {
+      // Cuenta gratuita o sin Premium activo
+      spotifyPremiumBlocked = true
+      saveFeedback.value = 'Spotify requiere Premium para audio completo directo; usando respaldo.'
+      setTimeout(() => {
+        if (saveFeedback.value.startsWith('Spotify requiere Premium')) saveFeedback.value = ''
+      }, 3500)
+      return false
+    }
+    if (res.status === 401) {
+      // Token vencido o sin scope 'streaming'
+      saveFeedback.value = 'Re-conecta Spotify en Apps Conectadas para activar audio directo Premium.'
+      setTimeout(() => {
+        if (saveFeedback.value.startsWith('Re-conecta Spotify')) saveFeedback.value = ''
+      }, 4000)
+      return false
+    }
+    if (!res.ok) return false
+
+    activeEngine.value = 'spotify'
+    lastSpotifyPositionMs = 0
+    updateYoutubeContainerVisibility()
+    startSpotifyTimePolling()
+    isPlaying.value = true
+    isLoadingStream.value = false
+    if (showMiniVideo.value) {
+      loadVideoPreviewForCurrentTrack()
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+function clearStreamWatchdog() {
+  if (streamWatchdogTimer) {
+    clearTimeout(streamWatchdogTimer)
+    streamWatchdogTimer = null
+  }
+}
+
+async function tryNextYoutubeCandidateOrSkip(requestId = activePlayRequestId) {
+  clearStreamWatchdog()
+  if (requestId !== activePlayRequestId || activeEngine.value !== 'youtube') return
+
+  if (currentCandidateIndex + 1 < currentCandidateIds.length && ytPlayer?.loadVideoById) {
+    currentCandidateIndex += 1
+    const nextVid = currentCandidateIds[currentCandidateIndex]
+    try {
+      startStreamWatchdog(requestId)
+      ytPlayer.loadVideoById(nextVid)
+      return
+    } catch {}
+  }
+
+  const track = currentTrack.value
+
+  // Respaldo automático con Spotify Premium si YouTube bloqueó todos los videos del tema
+  if (track && getExternalApiConfig().spotifyAccessToken && !spotifyPremiumBlocked) {
+    const playedViaSpotify = await playSpotifyTrack(track, requestId)
+    if (requestId !== activePlayRequestId) return
+    if (playedViaSpotify) {
+      saveFeedback.value = 'Video bloqueado en YouTube; reproduciendo desde tu Spotify Premium.'
+      setTimeout(() => {
+        if (saveFeedback.value.startsWith('Video bloqueado en YouTube')) saveFeedback.value = ''
+      }, 3200)
+      return
+    }
+  }
+
+  const previewUrl = track?.preview_url || track?.audio_url
+  const isSpotifyOrCustom =
+    (track?.plataforma_origen || '').toLowerCase() === 'spotify' || isCustomUploadedAudio(track)
+  if (isSpotifyOrCustom && previewUrl && !previewUrl.includes('soundhelix.com')) {
+    fallbackToHtml5Preview()
+    return
+  }
+
+  isLoadingStream.value = false
+  isPlaying.value = false
+  if (queue.value.length > 1) {
+    saveFeedback.value = 'Audio no disponible en YouTube, pasando al siguiente...'
+    setTimeout(() => {
+      if (saveFeedback.value.startsWith('Audio no disponible')) saveFeedback.value = ''
+    }, 2600)
+    nextTrack()
+  }
+}
+
+function startStreamWatchdog(requestId = activePlayRequestId) {
+  clearStreamWatchdog()
+  streamWatchdogTimer = setTimeout(() => {
+    if (requestId !== activePlayRequestId || activeEngine.value !== 'youtube') return
+    const state = ytPlayer?.getPlayerState?.()
+    // Si sigue sin reproducir (1 = PLAYING, 2 = PAUSED), probar otro video o avanzar
+    if (state !== 1 && state !== 2) {
+      tryNextYoutubeCandidateOrSkip(requestId)
+    }
+  }, 6500)
+}
 
 function ensureHtml5Audio() {
   if (!audioInstance && typeof window !== 'undefined') {
@@ -247,7 +641,7 @@ function updateYoutubeContainerVisibility() {
     iframeEl.style.display = 'block'
   }
 
-  if (showMiniVideo.value && currentTrack.value && activeEngine.value === 'youtube') {
+  if (showMiniVideo.value && currentTrack.value) {
     if (isVideoExpanded.value) {
       // Ocupa todo el cuadro de interfaz menos el panel lateral (248px en desktop / 78px en mobile) y menos el reproductor inferior (90px)
       const sidebarWidth = window.innerWidth <= 980 ? 78 : 248
@@ -365,29 +759,40 @@ function ensureYoutubePlayer() {
             if (activeEngine.value !== 'youtube') return
             const YTS = window.YT?.PlayerState || { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3 }
             if (event.data === YTS.PLAYING) {
+              clearStreamWatchdog()
               isPlaying.value = true
               isLoadingStream.value = false
               const dur = Number(ytPlayer.getDuration?.()) || 0
               if (dur > 0) duration.value = dur
             } else if (event.data === YTS.PAUSED) {
+              clearStreamWatchdog()
               isPlaying.value = false
             } else if (event.data === YTS.BUFFERING) {
               isLoadingStream.value = true
             } else if (event.data === YTS.ENDED) {
+              clearStreamWatchdog()
               handleTrackEnded()
             }
           },
           onError: () => {
-            if (activeEngine.value !== 'youtube') return
-            if (currentCandidateIndex + 1 < currentCandidateIds.length) {
-              currentCandidateIndex += 1
-              const nextVid = currentCandidateIds[currentCandidateIndex]
-              try {
-                ytPlayer.loadVideoById(nextVid)
-                return
-              } catch {}
+            if (activeEngine.value !== 'youtube') {
+              // Si estamos en Spotify mostrando video paralelo, probar otro candidato en silencio sin cortar Spotify
+              if (showMiniVideo.value && currentCandidateIndex + 1 < currentCandidateIds.length && ytPlayer?.loadVideoById) {
+                currentCandidateIndex += 1
+                try {
+                  ytPlayer.mute()
+                  ytPlayer.loadVideoById({
+                    videoId: currentCandidateIds[currentCandidateIndex],
+                    startSeconds: Math.floor(currentTime.value || 0)
+                  })
+                } catch {}
+              } else if (showMiniVideo.value) {
+                const titleEl = document.getElementById('gavify-yt-window-title')
+                if (titleEl) titleEl.textContent = 'Video no disponible en YouTube para esta canción'
+              }
+              return
             }
-            fallbackToHtml5Preview()
+            tryNextYoutubeCandidateOrSkip(activePlayRequestId)
           }
         }
       })
@@ -430,16 +835,37 @@ function fallbackToHtml5Preview() {
   }
 }
 
-function handleTrackEnded() {
-  if (isRepeat.value) {
-    seekTo(0)
-    if (activeEngine.value === 'youtube' && ytPlayer?.playVideo) {
+function replayCurrentTrack() {
+  seekTo(0)
+  if (activeEngine.value === 'spotify' && spotifyPlayer) {
+    try {
+      spotifyPlayer.seek(0)
+      spotifyPlayer.resume()
+      isPlaying.value = true
+    } catch {}
+  } else if (activeEngine.value === 'youtube' && ytPlayer) {
+    try {
+      ytPlayer.seekTo(0, true)
       ytPlayer.playVideo()
-    } else if (audioInstance) {
-      audioInstance.play().catch(() => {})
-    }
-  } else {
+      isPlaying.value = true
+    } catch {}
+  } else if (audioInstance) {
+    audioInstance.currentTime = 0
+    audioInstance.play().catch(() => {})
+    isPlaying.value = true
+  }
+}
+
+function handleTrackEnded() {
+  if (isRepeatOne.value) {
+    replayCurrentTrack()
+  } else if (isRepeat.value) {
     nextTrack()
+  } else if (currentIndex.value < queue.value.length - 1) {
+    nextTrack()
+  } else {
+    isPlaying.value = false
+    seekTo(0)
   }
 }
 
@@ -458,19 +884,18 @@ async function resolveYoutubeCandidatesForTrack(track) {
     candidates.push(track.youtube_video_id)
   }
 
-  const titleKey = String(track.titulo || '').trim().toLowerCase()
-  if (KNOWN_SONG_CANDIDATES[titleKey]) {
-    for (const id of KNOWN_SONG_CANDIDATES[titleKey]) {
-      if (!candidates.includes(id)) candidates.push(id)
-    }
-  }
-
   const query = `${track.artista || ''} ${track.titulo || ''}`.trim()
   const cacheKey = query.toLowerCase()
+  const titleKey = String(track.titulo || '').trim().toLowerCase()
 
   if (candidateMemoryCache.has(cacheKey)) {
     for (const id of candidateMemoryCache.get(cacheKey)) {
       if (!candidates.includes(id)) candidates.push(id)
+    }
+    if (KNOWN_SONG_CANDIDATES[titleKey]) {
+      for (const id of KNOWN_SONG_CANDIDATES[titleKey]) {
+        if (!candidates.includes(id)) candidates.push(id)
+      }
     }
     return candidates
   }
@@ -486,15 +911,19 @@ async function resolveYoutubeCandidatesForTrack(track) {
 
         if (fetchedIds.length > 0) {
           candidateMemoryCache.set(cacheKey, fetchedIds)
-          const merged = [...candidates]
           for (const id of fetchedIds) {
-            if (!merged.includes(id)) merged.push(id)
+            if (!candidates.includes(id)) candidates.push(id)
           }
-          return merged
         }
       }
     } catch (e) {
       console.warn('Could not fetch live YouTube candidates:', e)
+    }
+  }
+
+  if (KNOWN_SONG_CANDIDATES[titleKey]) {
+    for (const id of KNOWN_SONG_CANDIDATES[titleKey]) {
+      if (!candidates.includes(id)) candidates.push(id)
     }
   }
 
@@ -606,18 +1035,30 @@ function isCustomUploadedAudio(track) {
   return url.startsWith('data:audio') || url.startsWith('blob:') || Boolean(track?.audio_ruta)
 }
 
-async function playTrack(track, trackList = null) {
+async function playTrack(track, trackList = null, options = {}) {
   if (!track) return
   const requestId = ++activePlayRequestId
+  const preserveOrder = Boolean(options?.preserveOrder)
+  const exactIndex = typeof options?.exactIndex === 'number' ? options.exactIndex : -1
 
-  if (Array.isArray(trackList) && trackList.length > 0) {
+  if (Array.isArray(trackList) && trackList.length > 0 && !preserveOrder) {
     queue.value = trackList.map(item => (item.canciones ? item.canciones : item)).filter(Boolean)
     const key = getTrackKey(track)
-    const idx = queue.value.findIndex(t => getTrackKey(t) === key)
+    const idx = exactIndex >= 0 && exactIndex < queue.value.length
+      ? exactIndex
+      : queue.value.findIndex(t => getTrackKey(t) === key)
     currentIndex.value = idx !== -1 ? idx : 0
+    if (isShuffle.value) {
+      regenerateShuffleOrder()
+    }
   } else if (queue.value.length === 0) {
     queue.value = [track]
     currentIndex.value = 0
+    if (isShuffle.value) {
+      regenerateShuffleOrder()
+    }
+  } else if (exactIndex >= 0 && exactIndex < queue.value.length) {
+    currentIndex.value = exactIndex
   } else {
     const key = getTrackKey(track)
     const existingIdx = queue.value.findIndex(t => getTrackKey(t) === key)
@@ -626,6 +1067,9 @@ async function playTrack(track, trackList = null) {
     } else {
       queue.value.push(track)
       currentIndex.value = queue.value.length - 1
+      if (isShuffle.value && !preserveOrder) {
+        regenerateShuffleOrder()
+      }
     }
   }
 
@@ -635,6 +1079,7 @@ async function playTrack(track, trackList = null) {
   duration.value = Number(track.duracion_segundos) || 215
   isLoadingStream.value = true
   savePlayerState()
+  recordListeningEvent(track)
 
   // Cargar letras de la canción automáticamente desde la API de letras
   fetchLyricsForTrack(track)
@@ -648,6 +1093,12 @@ async function playTrack(track, trackList = null) {
       ytPlayer.stopVideo()
     } catch {}
   }
+  if (spotifyPlayer && typeof spotifyPlayer.pause === 'function') {
+    try {
+      spotifyPlayer.pause()
+    } catch {}
+  }
+  stopSpotifyTimePolling()
 
   if (isCustomUploadedAudio(track)) {
     activeEngine.value = 'html5'
@@ -661,6 +1112,13 @@ async function playTrack(track, trackList = null) {
       })
     }
     return
+  }
+
+  // Si la canción es de Spotify y el usuario tiene sesión Spotify conectada con Premium, reproducir directo desde Spotify
+  if ((track.plataforma_origen || '').toLowerCase() === 'spotify') {
+    const playedOnSpotify = await playSpotifyTrack(track, requestId)
+    if (requestId !== activePlayRequestId) return
+    if (playedOnSpotify) return
   }
 
   activeEngine.value = 'youtube'
@@ -683,6 +1141,7 @@ async function playTrack(track, trackList = null) {
       } else {
         playerInstance.unMute()
       }
+      startStreamWatchdog(requestId)
       playerInstance.loadVideoById(currentCandidateIds[0])
       isPlaying.value = true
       return
@@ -691,7 +1150,7 @@ async function playTrack(track, trackList = null) {
     }
   }
 
-  fallbackToHtml5Preview()
+  tryNextYoutubeCandidateOrSkip(requestId)
 }
 
 async function togglePlay() {
@@ -704,6 +1163,14 @@ async function togglePlay() {
     if (resumeAt > 2) {
       setTimeout(() => seekTo(resumeAt), 700)
     }
+    return
+  }
+  if (activeEngine.value === 'spotify' && spotifyPlayer) {
+    try {
+      await spotifyPlayer.togglePlay()
+      isPlaying.value = !isPlaying.value
+      savePlayerState()
+    } catch {}
     return
   }
   if (activeEngine.value === 'youtube' && ytPlayer) {
@@ -733,14 +1200,28 @@ function nextTrack() {
   if (!queue.value.length) return
   let nextIdx = 0
   if (isShuffle.value && queue.value.length > 1) {
-    do {
-      nextIdx = Math.floor(Math.random() * queue.value.length)
-    } while (nextIdx === currentIndex.value)
+    if (!shuffleOrder.value.length || shuffleOrder.value.length !== queue.value.length) {
+      regenerateShuffleOrder()
+    }
+    const currentPos = shuffleOrder.value.indexOf(currentIndex.value)
+    if (currentPos !== -1 && currentPos + 1 < shuffleOrder.value.length) {
+      nextIdx = shuffleOrder.value[currentPos + 1]
+    } else {
+      // Fin del orden aleatorio
+      if (isRepeat.value) {
+        regenerateShuffleOrder()
+        nextIdx = shuffleOrder.value[0] !== currentIndex.value ? shuffleOrder.value[0] : (shuffleOrder.value[1] || 0)
+      } else {
+        isPlaying.value = false
+        seekTo(0)
+        return
+      }
+    }
   } else {
     nextIdx = (currentIndex.value + 1) % queue.value.length
   }
   currentIndex.value = nextIdx
-  playTrack(queue.value[nextIdx])
+  playTrack(queue.value[nextIdx], null, { preserveOrder: true, exactIndex: nextIdx })
 }
 
 function prevTrack() {
@@ -749,15 +1230,39 @@ function prevTrack() {
     return
   }
   if (!queue.value.length) return
-  const prevIdx = (currentIndex.value - 1 + queue.value.length) % queue.value.length
+  let prevIdx = 0
+  if (isShuffle.value && queue.value.length > 1 && shuffleOrder.value.length === queue.value.length) {
+    const currentPos = shuffleOrder.value.indexOf(currentIndex.value)
+    if (currentPos > 0) {
+      prevIdx = shuffleOrder.value[currentPos - 1]
+    } else {
+      prevIdx = shuffleOrder.value[shuffleOrder.value.length - 1]
+    }
+  } else {
+    prevIdx = (currentIndex.value - 1 + queue.value.length) % queue.value.length
+  }
   currentIndex.value = prevIdx
-  playTrack(queue.value[prevIdx])
+  playTrack(queue.value[prevIdx], null, { preserveOrder: true, exactIndex: prevIdx })
+}
+
+function playTrackAt(index) {
+  if (!queue.value.length) return
+  if (index < 0 || index >= queue.value.length) return
+  currentIndex.value = index
+  playTrack(queue.value[index], null, { preserveOrder: true, exactIndex: index })
 }
 
 function seekTo(seconds) {
   if (!currentTrack.value) return
   const target = Math.max(0, Math.min(Number(seconds) || 0, duration.value || 360))
   currentTime.value = target
+
+  if (activeEngine.value === 'spotify' && spotifyPlayer && typeof spotifyPlayer.seek === 'function') {
+    try {
+      spotifyPlayer.seek(Math.round(target * 1000))
+    } catch {}
+    return
+  }
 
   if (activeEngine.value === 'youtube' && ytPlayer && typeof ytPlayer.seekTo === 'function') {
     try {
@@ -777,6 +1282,12 @@ function setVolume(val) {
   volume.value = v
   isMuted.value = v === 0
 
+  if (spotifyPlayer && typeof spotifyPlayer.setVolume === 'function') {
+    try {
+      spotifyPlayer.setVolume(v)
+    } catch {}
+  }
+
   if (ytPlayer && typeof ytPlayer.setVolume === 'function') {
     try {
       ytPlayer.setVolume(Math.round(v * 100))
@@ -794,6 +1305,11 @@ function setVolume(val) {
 
 function toggleMute() {
   isMuted.value = !isMuted.value
+  if (spotifyPlayer && typeof spotifyPlayer.setVolume === 'function') {
+    try {
+      spotifyPlayer.setVolume(isMuted.value ? 0 : volume.value)
+    } catch {}
+  }
   if (ytPlayer) {
     try {
       if (isMuted.value) ytPlayer.mute()
@@ -806,12 +1322,100 @@ function toggleMute() {
   }
 }
 
+function regenerateShuffleOrder() {
+  const n = queue.value.length
+  if (n <= 1) {
+    shuffleOrder.value = n === 1 ? [0] : []
+    return
+  }
+  const cur = currentIndex.value
+  const indices = []
+  for (let i = 0; i < n; i++) {
+    if (i !== cur) indices.push(i)
+  }
+  // Fisher-Yates shuffle
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]]
+  }
+  shuffleOrder.value = cur >= 0 ? [cur, ...indices] : indices
+}
+
 function toggleShuffle() {
   isShuffle.value = !isShuffle.value
+  if (isShuffle.value) {
+    regenerateShuffleOrder()
+  }
+  savePlayerState()
 }
 
 function toggleRepeat() {
-  isRepeat.value = !isRepeat.value
+  if (!isRepeat.value && !isRepeatOne.value) {
+    // Apagado -> Repetir lista completa
+    isRepeat.value = true
+    isRepeatOne.value = false
+  } else if (isRepeat.value && !isRepeatOne.value) {
+    // Repetir lista -> Repetir 1 canción (el mismo tema)
+    isRepeat.value = false
+    isRepeatOne.value = true
+  } else {
+    // Repetir 1 -> Apagado
+    isRepeat.value = false
+    isRepeatOne.value = false
+  }
+  savePlayerState()
+}
+
+function toggleRepeatOne() {
+  isRepeatOne.value = !isRepeatOne.value
+  if (isRepeatOne.value) {
+    isRepeat.value = false
+  }
+  savePlayerState()
+}
+
+function toggleQueue() {
+  showQueue.value = !showQueue.value
+}
+
+function toggleExpandQueue() {
+  isQueueExpanded.value = !isQueueExpanded.value
+}
+
+async function loadVideoPreviewForCurrentTrack() {
+  const track = currentTrack.value
+  if (!track || !showMiniVideo.value) return
+  const titleEl = document.getElementById('gavify-yt-window-title')
+  if (titleEl) titleEl.textContent = `Buscando video para "${track.titulo}"...`
+
+  const [playerInstance, candidates] = await Promise.all([
+    ensureYoutubePlayer(),
+    resolveYoutubeCandidatesForTrack(track)
+  ])
+  if (!showMiniVideo.value || currentTrack.value?.titulo !== track.titulo) return
+
+  if (playerInstance && candidates.length > 0) {
+    currentCandidateIds = candidates
+    currentCandidateIndex = 0
+    try {
+      playerInstance.mute()
+      playerInstance.loadVideoById({
+        videoId: candidates[0],
+        startSeconds: Math.floor(currentTime.value || 0)
+      })
+      if (!isPlaying.value) {
+        setTimeout(() => {
+          try {
+            if (!isPlaying.value) playerInstance.pauseVideo()
+          } catch {}
+        }, 400)
+      }
+      if (titleEl) titleEl.textContent = `${track.titulo} — ${track.artista} (Video disponible)`
+      return
+    } catch {}
+  }
+
+  if (titleEl) titleEl.textContent = `Video no disponible en YouTube para "${track.titulo}"`
 }
 
 function toggleMiniVideo() {
@@ -822,6 +1426,13 @@ function toggleMiniVideo() {
     if (isLyricsExpanded.value) {
       showLyrics.value = false
     }
+    if (activeEngine.value !== 'youtube') {
+      loadVideoPreviewForCurrentTrack()
+    }
+  } else if (activeEngine.value !== 'youtube' && ytPlayer?.pauseVideo) {
+    try {
+      ytPlayer.pauseVideo()
+    } catch {}
   }
   updateYoutubeContainerVisibility()
 }
@@ -861,9 +1472,11 @@ function toggleSaveTrack(track = currentTrack.value, onSaveCallback = null) {
   const idx = savedTrackIds.value.indexOf(key)
   if (idx !== -1) {
     savedTrackIds.value.splice(idx, 1)
+    isCurrentSaved.value = false
     saveFeedback.value = 'Quitada de tus canciones guardadas'
   } else {
     savedTrackIds.value.push(key)
+    isCurrentSaved.value = true
     saveFeedback.value = 'Guardada en tu biblioteca'
     if (typeof onSaveCallback === 'function') {
       onSaveCallback(track)
@@ -876,6 +1489,13 @@ function toggleSaveTrack(track = currentTrack.value, onSaveCallback = null) {
 }
 
 function stopAllPlayback() {
+  clearStreamWatchdog()
+  stopSpotifyTimePolling()
+  if (spotifyPlayer && typeof spotifyPlayer.pause === 'function') {
+    try {
+      spotifyPlayer.pause()
+    } catch {}
+  }
   const audio = ensureHtml5Audio()
   if (audio) {
     audio.pause()
@@ -926,7 +1546,7 @@ function closePlayer() {
   updateYoutubeContainerVisibility()
 }
 
-const isCurrentSaved = computed(() => isTrackSaved(currentTrack.value))
+const isCurrentSaved = ref(false)
 
 export function usePlayer() {
   return {
@@ -936,7 +1556,12 @@ export function usePlayer() {
     isPlaying,
     isLoadingStream,
     isShuffle,
+    shuffleOrder,
+    regenerateShuffleOrder,
     isRepeat,
+    isRepeatOne,
+    showQueue,
+    isQueueExpanded,
     volume,
     isMuted,
     currentTime,
@@ -951,6 +1576,8 @@ export function usePlayer() {
     plainLyrics,
     syncedLyrics,
     playTrack,
+    playTrackAt,
+    replayCurrentTrack,
     togglePlay,
     nextTrack,
     prevTrack,
@@ -959,6 +1586,9 @@ export function usePlayer() {
     toggleMute,
     toggleShuffle,
     toggleRepeat,
+    toggleRepeatOne,
+    toggleQueue,
+    toggleExpandQueue,
     toggleMiniVideo,
     toggleExpandVideo,
     toggleLyrics,
@@ -966,6 +1596,8 @@ export function usePlayer() {
     isTrackSaved,
     toggleSaveTrack,
     removeCurrentTrack,
-    closePlayer
+    closePlayer,
+    listeningHistory,
+    refreshListeningHistoryForCurrentUser
   }
 }

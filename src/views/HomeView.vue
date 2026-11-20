@@ -26,7 +26,7 @@
         <p class="eyebrow accent">TU MÚSICA, EN UN SOLO LUGAR</p>
         <h1>Conoce lo que<br /><em>realmente</em> escuchas.</h1>
         <p class="hero-text">
-          Gavify convierte tus datos de Spotify en insights simples para descubrir tus hábitos, limpiar tu biblioteca y escuchar mejor.
+          Gavify convierte tus datos de Spotify, YouTube Music y YouTube en insights simples para descubrir tus hábitos, limpiar tu biblioteca y escuchar mejor.
         </p>
         <div class="hero-cta-group">
           <button class="primary" @click="handleGetStarted">
@@ -37,32 +37,43 @@
           </router-link>
         </div>
         <div class="proof">
-          <div class="avatars"><i>AM</i><i>CR</i><i>JM</i></div>
-          Más de 2.400 personas ya escuchan distinto
+          <div class="avatars"><i>S</i><i>Y</i><i>G</i></div>
+          Conecta Spotify y YouTube Music en una sola biblioteca
         </div>
       </div>
 
       <div class="hero-art">
-        <div class="vinyl"><span class="vinyl-label">G</span></div>
+        <div class="vinyl-stage">
+          <div class="vinyl-light-wave"></div>
+          <div class="vinyl"><span class="vinyl-label">G</span></div>
+        </div>
         <div class="card one">
-          <span class="tiny">TU ARTISTA #1</span>
-          <strong>Maroon 5</strong>
-          <small>12h 42min escuchadas</small>
+          <span class="tiny">MULTI-PLATAFORMA</span>
+          <strong>Spotify + YouTube</strong>
+          <small>Todas tus playlists reunidas</small>
         </div>
         <div class="card two">
-          <span class="tiny">DIVERSIDAD</span>
-          <strong>84%</strong>
-          <small>de tu música es nueva</small>
+          <span class="tiny">BIBLIOTECA LIMPIA</span>
+          <strong>Sin repetidas</strong>
+          <small>Detecta duplicados al instante</small>
         </div>
         <div class="equalizer">
-          <i v-for="height in equalizerHeights" :key="height" :style="{ height: height + 'px' }"></i>
+          <i
+            v-for="(height, idx) in equalizerHeights"
+            :key="idx"
+            :style="{
+              height: height + 'px',
+              animationDelay: (idx * 0.14) + 's',
+              animationDuration: (0.85 + (idx % 3) * 0.22) + 's'
+            }"
+          ></i>
         </div>
       </div>
     </section>
 
     <div class="footer">
-      <span>UN RESUMEN HONESTO DE TUS HÁBITOS</span>
-      <span>SCROLL PARA EXPLORAR ↓</span>
+      <span>GAVIFY · TU REPRODUCTOR Y GESTOR DE PLAYLISTS</span>
+      <span>INICIA SESIÓN PARA CONECTAR TUS CUENTAS</span>
     </div>
   </main>
 </template>

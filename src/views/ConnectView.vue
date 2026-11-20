@@ -1,28 +1,12 @@
 <template>
-  <main class="connect">
-    <div class="connect-top">
-      <button class="back btn-icon-flex" @click="goBack">
-        <AppIcon name="arrow-left" :size="15" />
-        <span>Volver</span>
-      </button>
-      <div class="brand">
-        <img class="logo-image" src="/GavifyLogo.png" alt="Gavify" />
-        <span>GAVIFY</span>
-      </div>
-      <span class="tiny">APPS CONECTADAS</span>
-    </div>
-
+  <main class="connect connect-embedded">
     <section class="connect-content connect-wide">
-      <div class="connect-icon">
-        <AppIcon name="link" :size="20" />
+      <div class="connect-head-centered">
+        <h1>Conectar Spotify y YouTube</h1>
+        <p class="connect-lead">
+          Vincula tus cuentas para importar tus playlists y escuchar sin límites.
+        </p>
       </div>
-      <p class="eyebrow accent">APPS CONECTADAS &amp; EXTRACCIÓN DE PLAYLISTS</p>
-      <h1>Conecta tus cuentas de<br /><em>Spotify, YouTube Music y YouTube.</em></h1>
-      <p class="connect-lead">
-        Hola <strong>{{ auth.currentUser.value?.nombre || 'Usuario' }}</strong>
-        ({{ auth.roleInfo.value?.etiqueta }} en <strong>{{ auth.currentUser.value?.organizacion_nombre }}</strong>).
-        Vincula tus cuentas reales para extraer tus playlists personales y canciones a tu biblioteca privada de Gavify.
-      </p>
 
       <!-- Feedback Messages -->
       <div v-if="mensajeExito" class="connect-alert success">
@@ -61,22 +45,23 @@
               v-if="!isSpotifyConnected"
               class="btn-platform btn-spotify btn-icon-flex"
               :disabled="cargando === 'spotify'"
-              @click="abrirModalVincular('spotify')"
+              @click="iniciarOAuthSpotify"
             >
               <AppIcon name="spotify" :size="16" />
-              <span>Vincular cuenta de Spotify</span>
+              <span>Conectar con mi cuenta de Spotify</span>
             </button>
             <template v-else>
               <button
                 class="btn-platform btn-spotify btn-icon-flex"
-                @click="abrirModalVincular('spotify')"
+                :disabled="cargando === 'spotify'"
+                @click="cargarMisPlaylistsSpotify"
               >
                 <AppIcon name="bolt" :size="14" />
-                <span>Extraer playlist de Spotify</span>
+                <span>Cargar mis playlists de Spotify</span>
               </button>
               <div class="connected-sub-actions">
-                <button class="btn-relink" @click="abrirModalVincular('spotify')">
-                  Cambiar cuenta / URL
+                <button class="btn-relink" @click="iniciarOAuthSpotify">
+                  Re-conectar Spotify
                 </button>
                 <button class="btn-disconnect" @click="desconectarPlataforma('spotify')">
                   Desvincular
@@ -86,103 +71,56 @@
           </div>
         </div>
 
-        <!-- 2. YOUTUBE MUSIC -->
-        <div class="platform-card" :class="{ connected: isYtMusicConnected }">
+        <!-- 2. YOUTUBE MUSIC & YOUTUBE (CUENTA GOOGLE UNIFICADA) -->
+        <div class="platform-card" :class="{ connected: isYtMusicConnected || isYoutubeConnected }">
           <div class="platform-top">
             <div class="platform-brand-badge">
               <AppIcon name="youtube_music" :size="20" />
-              <span class="platform-badge ytmusic-badge">App YT Music</span>
+              <AppIcon name="youtube" :size="20" />
+              <span class="platform-badge ytmusic-badge">YT Music &amp; YouTube</span>
             </div>
-            <span class="conn-status" :class="{ active: isYtMusicConnected }">
-              {{ isYtMusicConnected ? '● Cuenta vinculada' : '○ Sin vincular' }}
+            <span class="conn-status" :class="{ active: isYtMusicConnected || isYoutubeConnected }">
+              {{ isYtMusicConnected || isYoutubeConnected ? '● Cuenta vinculada' : '○ Sin vincular' }}
             </span>
           </div>
           <div class="platform-header-row">
-            <AppIcon name="youtube_music" :size="32" />
+            <div style="display:flex;align-items:center;gap:6px;">
+              <AppIcon name="youtube_music" :size="30" />
+              <AppIcon name="youtube" :size="30" />
+            </div>
             <div>
-              <h3>YouTube Music</h3>
-              <small v-if="isYtMusicConnected" class="user-handle">
-                {{ getUsernameHandle('youtube_music') }}
+              <h3>YouTube Music y YouTube</h3>
+              <small v-if="isYtMusicConnected || isYoutubeConnected" class="user-handle">
+                {{ getUsernameHandle('youtube_music') || getUsernameHandle('youtube') }}
               </small>
             </div>
           </div>
-          <p>Conecta tu cuenta de Google / YT Music para importar tu Supermix y tus listas de reproducción.</p>
+          <p>Conecta una sola vez tu cuenta de Google para importar tus listas de YouTube Music y YouTube.</p>
 
           <div class="platform-actions">
             <button
-              v-if="!isYtMusicConnected"
+              v-if="!isYtMusicConnected && !isYoutubeConnected"
               class="btn-platform btn-ytmusic btn-icon-flex"
-              :disabled="cargando === 'youtube_music'"
-              @click="abrirModalVincular('youtube_music')"
+              :disabled="cargando === 'youtube_music' || cargando === 'youtube'"
+              @click="iniciarOAuthGoogle('youtube_music')"
             >
               <AppIcon name="youtube_music" :size="16" />
-              <span>Vincular cuenta de YT Music</span>
+              <span>{{ cargando === 'youtube_music' ? 'Conectando...' : 'Conectar con Google (YT Music / YouTube)' }}</span>
             </button>
             <template v-else>
               <button
                 class="btn-platform btn-ytmusic btn-icon-flex"
-                @click="abrirModalVincular('youtube_music')"
+                :disabled="cargando === 'youtube_music'"
+                @click="cargarMisPlaylistsYoutube('youtube_music')"
               >
                 <AppIcon name="bolt" :size="14" />
-                <span>Extraer playlist de YT Music</span>
+                <span>Cargar mis playlists de YouTube / YT Music</span>
               </button>
               <div class="connected-sub-actions">
-                <button class="btn-relink" @click="abrirModalVincular('youtube_music')">
-                  Cambiar cuenta / URL
+                <button class="btn-relink" @click="iniciarOAuthGoogle('youtube_music')">
+                  Cambiar cuenta
                 </button>
-                <button class="btn-disconnect" @click="desconectarPlataforma('youtube_music')">
-                  Desvincular
-                </button>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- 3. YOUTUBE -->
-        <div class="platform-card" :class="{ connected: isYoutubeConnected }">
-          <div class="platform-top">
-            <div class="platform-brand-badge">
-              <AppIcon name="youtube" :size="20" />
-              <span class="platform-badge youtube-badge">App YouTube</span>
-            </div>
-            <span class="conn-status" :class="{ active: isYoutubeConnected }">
-              {{ isYoutubeConnected ? '● Cuenta vinculada' : '○ Sin vincular' }}
-            </span>
-          </div>
-          <div class="platform-header-row">
-            <AppIcon name="youtube" :size="32" />
-            <div>
-              <h3>YouTube</h3>
-              <small v-if="isYoutubeConnected" class="user-handle">
-                {{ getUsernameHandle('youtube') }}
-              </small>
-            </div>
-          </div>
-          <p>Vincula tu canal de YouTube para extraer sesiones en vivo, videoclips y playlists guardadas.</p>
-
-          <div class="platform-actions">
-            <button
-              v-if="!isYoutubeConnected"
-              class="btn-platform btn-youtube btn-icon-flex"
-              :disabled="cargando === 'youtube'"
-              @click="abrirModalVincular('youtube')"
-            >
-              <AppIcon name="youtube" :size="16" />
-              <span>Vincular cuenta de YouTube</span>
-            </button>
-            <template v-else>
-              <button
-                class="btn-platform btn-youtube btn-icon-flex"
-                @click="abrirModalVincular('youtube')"
-              >
-                <AppIcon name="bolt" :size="14" />
-                <span>Extraer playlist de YouTube</span>
-              </button>
-              <div class="connected-sub-actions">
-                <button class="btn-relink" @click="abrirModalVincular('youtube')">
-                  Cambiar cuenta / URL
-                </button>
-                <button class="btn-disconnect" @click="desconectarPlataforma('youtube')">
+                <button class="btn-disconnect" @click="desconectarGoogle">
                   Desvincular
                 </button>
               </div>
@@ -191,13 +129,13 @@
         </div>
       </div>
 
-      <!-- Extractor Directo por Enlace + Listas Reales Sincronizadas -->
-      <div v-if="hasAnyConnected" class="account-playlists-preview">
-        <!-- Barra para pegar enlace real de playlist de Spotify, YT Music o YouTube -->
+      <!-- Extractor Directo de Playlists Públicas por Enlace + Listas Reales Sincronizadas -->
+      <div class="account-playlists-preview">
+        <!-- Barra para pegar enlace público de playlist de Spotify, YT Music o YouTube -->
         <div class="url-extractor-box">
           <div class="url-extractor-head">
-            <span class="tiny accent">EXTRACCIÓN DIRECTA DESDE TUS APPS CONECTADAS</span>
-            <h4>¿Tienes el enlace de tu playlist? Pégalo para extraer todas sus canciones reales</h4>
+            <span class="tiny accent">IMPORTAR PLAYLISTS PÚBLICAS</span>
+            <h4>Importa cualquier playlist pública de Spotify, YouTube Music o YouTube por enlace</h4>
           </div>
           <div class="url-extractor-row">
             <div class="url-input-wrap">
@@ -228,6 +166,96 @@
             </button>
           </div>
         </div>
+
+        <!-- Playlists reales obtenidas directamente desde la cuenta de Spotify conectada -->
+        <template v-if="misPlaylistsSpotify.length">
+          <div class="preview-divider"></div>
+          <div class="preview-header">
+            <div>
+              <span class="tiny accent">CUENTA DE SPOTIFY CONECTADA</span>
+              <h3>Tus playlists en Spotify ({{ misPlaylistsSpotify.length }})</h3>
+            </div>
+          </div>
+          <div class="playlists-cards-grid">
+            <div
+              v-for="pl in misPlaylistsSpotify"
+              :key="pl.id"
+              class="pl-detect-card"
+            >
+              <img
+                v-if="pl.portada_url"
+                :src="pl.portada_url"
+                :alt="pl.nombre"
+                class="pl-detect-cover"
+              />
+              <div v-else class="pl-detect-cover pl-cover-empty">
+                <AppIcon name="spotify" :size="20" />
+              </div>
+              <div class="pl-detect-info">
+                <div class="pl-plat-line">
+                  <AppIcon name="spotify" :size="14" />
+                  <span class="tiny">SPOTIFY</span>
+                </div>
+                <h4>{{ pl.nombre }}</h4>
+                <p>{{ pl.descripcion || 'Playlist de tu cuenta de Spotify' }}</p>
+                <small>{{ pl.total > 0 ? `${pl.total} canciones reales` : 'Lista de tu cuenta Spotify' }}</small>
+              </div>
+              <button
+                class="btn-extract-one"
+                :disabled="extrayendoUrl"
+                @click="extraerPlaylistSpotifyDirecta(pl.url)"
+              >
+                <AppIcon name="plus" :size="14" />
+                <span>Extraer</span>
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <!-- Playlists detectadas directamente desde la cuenta real de Google / YouTube Music -->
+        <template v-if="misPlaylistsYoutube.length">
+          <div class="preview-divider"></div>
+          <div class="preview-header">
+            <div>
+              <span class="tiny accent">CUENTA DE GOOGLE / YOUTUBE CONECTADA</span>
+              <h3>Tus playlists en YouTube Music y YouTube ({{ misPlaylistsYoutube.length }})</h3>
+            </div>
+          </div>
+          <div class="playlists-cards-grid">
+            <div
+              v-for="pl in misPlaylistsYoutube"
+              :key="pl.id"
+              class="pl-detect-card"
+            >
+              <img
+                v-if="pl.portada"
+                :src="pl.portada"
+                :alt="pl.nombre"
+                class="pl-detect-cover"
+              />
+              <div v-else class="pl-detect-cover pl-cover-empty">
+                <AppIcon name="youtube_music" :size="20" />
+              </div>
+              <div class="pl-detect-info">
+                <div class="pl-plat-line">
+                  <AppIcon name="youtube_music" :size="14" />
+                  <span class="tiny">YT MUSIC / YOUTUBE</span>
+                </div>
+                <h4>{{ pl.nombre }}</h4>
+                <p>Playlist de tu cuenta de Google</p>
+                <small>{{ pl.total > 0 ? `${pl.total} canciones reales` : 'Lista de tu cuenta Google' }}</small>
+              </div>
+              <button
+                class="btn-extract-one"
+                :disabled="extrayendoUrl"
+                @click="extraerPlaylistYoutubeDirecta(pl)"
+              >
+                <AppIcon name="plus" :size="14" />
+                <span>Extraer</span>
+              </button>
+            </div>
+          </div>
+        </template>
 
         <div class="preview-divider"></div>
 
@@ -361,24 +389,38 @@
         </div>
       </div>
     </div>
+
+    <!-- PANTALLA DE CARGA CON DISCO DE VINILO GIRANDO -->
+    <div v-if="cargando || extrayendoUrl" class="vinyl-loading-screen">
+      <div class="vinyl-loading-card">
+        <div class="loading-vinyl-disc">
+          <span class="loading-vinyl-label">G</span>
+        </div>
+        <h3>{{ extrayendoUrl ? 'Extrayendo canciones de tu playlist...' : 'Conectando tu cuenta...' }}</h3>
+        <p>Por favor espera unos segundos mientras sincronizamos tus pistas reales.</p>
+      </div>
+    </div>
   </main>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuth } from '@/services/auth'
-import { musicApiService } from '@/services/musicApis'
+import { musicApiService, getExternalApiConfig, saveExternalApiConfig } from '@/services/musicApis'
 import { dbService } from '@/services/db'
 import AppIcon from '@/components/AppIcon.vue'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuth()
 
 const cargando = ref('')
 const extrayendoUrl = ref(false)
 const urlPlaylistInput = ref('')
 const playlistsReales = ref([])
+const misPlaylistsSpotify = ref([])
+const misPlaylistsYoutube = ref([])
 const mensajeExito = ref('')
 const mensajeError = ref('')
 
@@ -393,8 +435,178 @@ async function cargarPlaylistsReales() {
   }
 }
 
-onMounted(() => {
-  cargarPlaylistsReales()
+async function iniciarOAuthSpotify() {
+  mensajeExito.value = ''
+  mensajeError.value = ''
+  cargando.value = 'spotify'
+  try {
+    await musicApiService.startSpotifyPkceAuth()
+  } catch (err) {
+    cargando.value = ''
+    mensajeError.value = err.message
+  }
+}
+
+async function cargarMisPlaylistsSpotify() {
+  mensajeExito.value = ''
+  mensajeError.value = ''
+  cargando.value = 'spotify'
+  try {
+    const listas = await musicApiService.fetchMySpotifyPlaylists()
+    if (!listas.length) {
+      // Si el token expiró o aún no inició OAuth real, pedir autorización
+      await iniciarOAuthSpotify()
+      return
+    }
+    misPlaylistsSpotify.value = listas
+    mensajeExito.value = `✓ Se cargaron ${listas.length} playlists reales de tu cuenta de Spotify.`
+  } catch (err) {
+    mensajeError.value = err.message
+  } finally {
+    cargando.value = ''
+  }
+}
+
+async function extraerPlaylistSpotifyDirecta(playlistUrl) {
+  urlPlaylistInput.value = playlistUrl
+  await extraerPorEnlace()
+}
+
+async function iniciarOAuthGoogle(platform = 'youtube_music') {
+  mensajeExito.value = ''
+  mensajeError.value = ''
+  cargando.value = platform
+  try {
+    await musicApiService.startGoogleYoutubeAuth(platform)
+  } catch (err) {
+    cargando.value = ''
+    mensajeError.value = err.message
+  }
+}
+
+async function desconectarGoogle() {
+  await desconectarPlataforma('youtube_music')
+  await desconectarPlataforma('youtube')
+  misPlaylistsYoutube.value = []
+}
+
+async function cargarMisPlaylistsYoutube(platform = 'youtube_music') {
+  mensajeExito.value = ''
+  mensajeError.value = ''
+  cargando.value = platform
+  try {
+    const listas = await musicApiService.fetchMyYoutubePlaylists()
+    if (!listas.length) {
+      await iniciarOAuthGoogle(platform)
+      return
+    }
+    misPlaylistsYoutube.value = listas
+    mensajeExito.value = `✓ Se cargaron ${listas.length} playlists reales de tu cuenta de Google / YouTube.`
+  } catch (err) {
+    mensajeError.value = err.message
+  } finally {
+    cargando.value = ''
+  }
+}
+
+async function extraerPlaylistYoutubeDirecta(playlistMeta) {
+  mensajeError.value = ''
+  mensajeExito.value = ''
+  extrayendoUrl.value = true
+  try {
+    const extracted = await musicApiService.extractYoutubePlaylistWithToken(
+      playlistMeta,
+      isYtMusicConnected.value ? 'youtube_music' : 'youtube'
+    )
+    const saved = await dbService.extractPlaylistFromApi(extracted)
+    await cargarPlaylistsReales()
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    const summary = saved?._syncSummary
+    if (summary && summary.existed) {
+      mensajeExito.value =
+        summary.addedCount > 0
+          ? `✓ Playlist "${extracted.nombre}" actualizada: se agregaron ${summary.addedCount} canciones nuevas y se mantuvieron ${summary.skippedCount} que ya tenías.`
+          : `✓ Playlist "${extracted.nombre}" ya estaba al día (${summary.totalCount} canciones sin duplicados).`
+    } else {
+      mensajeExito.value = `✓ Playlist "${extracted.nombre}" extraída con ${extracted.canciones.length} canciones reales.`
+    }
+  } catch (err) {
+    mensajeError.value = err.message
+  } finally {
+    extrayendoUrl.value = false
+  }
+}
+
+onMounted(async () => {
+  await cargarPlaylistsReales()
+
+  // 1. Detectar callback OAuth de Google / YouTube Music (#access_token=...)
+  const rawHash = window.location.hash || ''
+  if (rawHash.includes('access_token=') || rawHash.includes('error=')) {
+    const hashParams = new URLSearchParams(rawHash.replace(/^#/, ''))
+    const hashError = hashParams.get('error')
+    if (hashError) {
+      mensajeError.value = 'Autorización de Google / YouTube Music cancelada o denegada.'
+      router.replace('/connect')
+      return
+    }
+    if (hashParams.get('access_token')) {
+      const state = hashParams.get('state') || 'google:youtube_music'
+      const platform = state.startsWith('google:') ? state.slice(7) : 'youtube_music'
+      cargando.value = platform
+      try {
+        const { profile } = await musicApiService.completeGoogleYoutubeCallback(rawHash)
+        const handle = profile.email || profile.displayName || 'Cuenta Google'
+        await auth.connectPlatform('youtube_music', profile.id, { handle })
+        await auth.connectPlatform('youtube', profile.id, { handle })
+        const listas = await musicApiService.fetchMyYoutubePlaylists()
+        misPlaylistsYoutube.value = listas
+        mensajeExito.value = `¡Cuenta real de Google / YouTube Music (${profile.displayName}) conectada! Se detectaron ${listas.length} playlists listas para extraer.`
+      } catch (err) {
+        mensajeError.value = err.message
+      } finally {
+        cargando.value = ''
+        router.replace('/connect')
+      }
+      return
+    }
+  }
+
+  // 2. Detectar callback OAuth PKCE de Spotify (?code=...)
+  const oauthCode = typeof route.query.code === 'string' ? route.query.code : ''
+  const oauthError = typeof route.query.error === 'string' ? route.query.error : ''
+
+  if (oauthError) {
+    mensajeError.value = 'Autorización de Spotify cancelada o denegada.'
+    router.replace('/connect')
+    return
+  }
+
+  if (oauthCode) {
+    cargando.value = 'spotify'
+    try {
+      const { profile } = await musicApiService.completeSpotifyPkceCallback(oauthCode)
+      await auth.connectPlatform('spotify', profile.id, {
+        handle: profile.displayName || profile.email || 'Cuenta Spotify'
+      })
+      const listas = await musicApiService.fetchMySpotifyPlaylists()
+      misPlaylistsSpotify.value = listas
+      mensajeExito.value = `¡Cuenta real de Spotify (${profile.displayName}) conectada! Se detectaron ${listas.length} playlists listas para extraer sin límite de canciones.`
+    } catch (err) {
+      mensajeError.value = err.message
+    } finally {
+      cargando.value = ''
+      router.replace('/connect')
+    }
+    return
+  }
+
+  if (isSpotifyConnected.value && getExternalApiConfig().spotifyAccessToken) {
+    misPlaylistsSpotify.value = await musicApiService.fetchMySpotifyPlaylists()
+  }
+  if ((isYtMusicConnected.value || isYoutubeConnected.value) && getExternalApiConfig().youtubeAccessToken) {
+    misPlaylistsYoutube.value = await musicApiService.fetchMyYoutubePlaylists()
+  }
 })
 
 // Modal de vinculación
@@ -481,7 +693,8 @@ function abrirModalVincular(platform) {
 
   formLink.value = {
     handle: handleActual || auth.currentUser.value?.email || `@${(auth.currentUser.value?.nombre || 'usuario').toLowerCase().replace(/\s+/g, '_')}`,
-    playlistUrl: ''
+    playlistUrl: '',
+    spotifyToken: platform === 'spotify' ? getExternalApiConfig().spotifyAccessToken || '' : ''
   }
   modalPlataforma.value = platform
 }
@@ -500,6 +713,11 @@ async function confirmarVinculacionCuenta() {
   cargando.value = platform
 
   try {
+    if (platform === 'spotify' && formLink.value.spotifyToken?.trim()) {
+      const cfg = getExternalApiConfig()
+      saveExternalApiConfig({ ...cfg, spotifyAccessToken: formLink.value.spotifyToken.trim() })
+    }
+
     await auth.connectPlatform(platform, null, {
       handle: formLink.value.handle.trim(),
       playlistUrl: formLink.value.playlistUrl.trim()
@@ -524,6 +742,11 @@ async function confirmarVinculacionCuenta() {
 
 async function desconectarPlataforma(platform) {
   await auth.disconnectPlatform(platform)
+  if (platform === 'spotify') {
+    misPlaylistsSpotify.value = []
+    const cfg = getExternalApiConfig()
+    saveExternalApiConfig({ ...cfg, spotifyAccessToken: '' })
+  }
   mensajeExito.value = 'App desvinculada correctamente.'
 }
 
@@ -534,9 +757,19 @@ async function extraerPorEnlace() {
   extrayendoUrl.value = true
   try {
     const playlistExtraida = await musicApiService.extractPlaylistByUrl(urlPlaylistInput.value.trim())
-    await dbService.extractPlaylistFromApi(playlistExtraida)
+    const resultado = await dbService.extractPlaylistFromApi(playlistExtraida)
     await cargarPlaylistsReales()
-    mensajeExito.value = `✓ Playlist "${playlistExtraida.nombre}" (${playlistExtraida.canciones.length} canciones) extraída y guardada en tus Playlists.`
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    const sync = resultado?._syncSummary
+    if (sync?.isUpdate) {
+      if (sync.addedCount > 0) {
+        mensajeExito.value = `✓ Playlist "${playlistExtraida.nombre}" actualizada: se agregaron ${sync.addedCount} canciones nuevas (${sync.skippedCount} ya estaban cargadas).`
+      } else {
+        mensajeExito.value = `✓ Playlist "${playlistExtraida.nombre}" ya está al día (${sync.skippedCount} canciones ya cargadas).`
+      }
+    } else {
+      mensajeExito.value = `✓ Playlist "${playlistExtraida.nombre}" (${playlistExtraida.canciones.length} canciones) extraída y guardada en tus Playlists.`
+    }
     urlPlaylistInput.value = ''
   } catch (err) {
     mensajeError.value = err.message
@@ -609,14 +842,31 @@ function irAGestorMusica() {
 </script>
 
 <style scoped>
+.connect-embedded {
+  min-height: auto !important;
+  padding: 12px 0 40px !important;
+  background: transparent !important;
+}
+
 .connect-wide {
   max-width: 980px !important;
-  margin-top: 5vh !important;
+  margin: 0 auto !important;
+}
+
+.connect-head-centered {
+  text-align: center;
+  margin: 0 auto 22px;
+}
+
+.connect-head-centered h1 {
+  margin: 0 0 8px;
+  font-size: 28px;
 }
 
 .connect-lead {
-  max-width: 640px !important;
-  margin: 0 auto 28px !important;
+  max-width: 560px !important;
+  margin: 0 auto !important;
+  text-align: center;
 }
 
 .connect-alert {
@@ -645,9 +895,9 @@ function irAGestorMusica() {
 
 .platforms-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-  margin-top: 24px;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 20px;
   text-align: left;
 }
 
@@ -1150,6 +1400,72 @@ function irAGestorMusica() {
 
 .link-modal-btns .btn-platform {
   flex: 1;
+}
+
+/* Pantalla de carga con disco de vinilo girando */
+.vinyl-loading-screen {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 12, 9, 0.86);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.vinyl-loading-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 14px;
+  max-width: 380px;
+}
+
+.vinyl-loading-card h3 {
+  margin: 4px 0 0;
+  font-size: 19px;
+  color: #ffffff;
+}
+
+.vinyl-loading-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.loading-vinyl-disc {
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle, #30362f 0 2px, #202520 3px 6.5px);
+  box-shadow: 0 0 0 1px #596156, 0 18px 45px rgba(0, 0, 0, 0.75);
+  display: grid;
+  place-items: center;
+  animation: connect-vinyl-spin 2.4s linear infinite;
+}
+
+.loading-vinyl-label {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #c8a14d;
+  border: 6px solid #9b7e40;
+  display: grid;
+  place-items: center;
+  font: 800 18px 'Plus Jakarta Sans', sans-serif;
+  color: #161a16;
+}
+
+@keyframes connect-vinyl-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 860px) {
