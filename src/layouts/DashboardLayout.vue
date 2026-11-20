@@ -1,7 +1,14 @@
 <template>
   <div class="shell">
-    <!-- PANEL LATERAL ESTÁTICO (SIN SCROLL DE PÁGINA) -->
-    <aside class="sidebar">
+    <!-- BACKDROP PARA MENÚ LATERAL EN MÓVIL -->
+    <div
+      v-if="mobileSidebarOpen"
+      class="mobile-sidebar-backdrop"
+      @click="mobileSidebarOpen = false"
+    ></div>
+
+    <!-- PANEL LATERAL ESTÁTICO (DESPLEGABLE EN MÓVIL) -->
+    <aside class="sidebar" :class="{ 'mobile-open': mobileSidebarOpen }">
       <router-link to="/dashboard" class="brand">
         <img class="logo-image" src="/GavifyLogo.png" alt="Gavify" />
         <span>GAVIFY</span>
@@ -134,11 +141,27 @@
     <main class="main">
       <header class="topbar">
         <div class="topbar-left">
+          <button
+            type="button"
+            class="mobile-menu-btn"
+            title="Abrir menú"
+            @click="mobileSidebarOpen = !mobileSidebarOpen"
+          >
+            <AppIcon name="menu" :size="20" />
+          </button>
           <h1>{{ pageTitle }}</h1>
         </div>
 
-        <!-- BUSCADOR CENTRAL DE CANCIONES (ABRE EL EXPLORADOR MULTI-PLATAFORMA) -->
+        <!-- BUSCADOR CENTRAL DE CANCIONES (EN MÓVIL SOLO LUPA) -->
         <div class="topbar-search-wrap">
+          <button
+            type="button"
+            class="mobile-search-icon-btn"
+            title="Buscar canción o artista"
+            @click="abrirBuscadorGlobal"
+          >
+            <AppIcon name="search" :size="18" />
+          </button>
           <div
             class="topbar-search-box"
             :class="{ active: showGlobalSearch }"
@@ -273,6 +296,7 @@ const auth = useAuth()
 const player = usePlayer()
 
 const showUserMenu = ref(false)
+const mobileSidebarOpen = ref(false)
 const showGlobalSearch = ref(false)
 const globalSearchQuery = ref('')
 const recentPlaylists = ref([])
@@ -350,6 +374,8 @@ watch(
   () => route.fullPath,
   () => {
     showGlobalSearch.value = false
+    showUserMenu.value = false
+    mobileSidebarOpen.value = false
   }
 )
 
@@ -889,24 +915,137 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
-@media (max-width: 900px) {
+.mobile-menu-btn,
+.mobile-search-icon-btn {
+  display: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #181c18;
+  border: 1px solid #2b312a;
+  color: var(--cream);
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.mobile-sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex !important;
+  }
+
+  .mobile-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(3px);
+    z-index: 960;
+  }
+
   .sidebar {
-    width: 78px;
-    padding: 18px 10px;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 265px !important;
+    padding: 20px 14px !important;
+    transform: translateX(-100%);
+    transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 970;
+    box-shadow: 12px 0 36px rgba(0, 0, 0, 0.75);
   }
 
-  .nav-text,
-  .recent-playlists-section,
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  .sidebar .brand span,
+  .sidebar .nav-text,
+  .sidebar .recent-playlists-section,
+  .sidebar .sidebar-action-wrap {
+    display: flex;
+  }
+
   .sidebar .brand span {
-    display: none;
+    display: inline;
   }
 
-  .new-playlist-pill {
-    padding: 10px;
+  .sidebar .recent-playlists-section {
+    flex-direction: column;
   }
 
   .sync-pill {
     display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .topbar {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .topbar-left h1 {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topbar-search-wrap {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .topbar-search-box {
+    display: none;
+  }
+
+  .mobile-search-icon-btn {
+    display: inline-flex;
+  }
+
+  .profile-top-btn {
+    padding: 3px;
+    border-radius: 50%;
+  }
+
+  .profile-top-info,
+  .caret-icon,
+  .admin-chip {
+    display: none;
+  }
+
+  .connected-apps-pill {
+    display: none;
+  }
+
+  .content {
+    padding: 14px 14px 48px;
+  }
+
+  .content.has-player {
+    padding-bottom: 215px;
   }
 }
 </style>

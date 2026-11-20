@@ -1480,4 +1480,22 @@ function irAGestorMusica() {
     align-items: stretch;
   }
 }
+@media (max-width: 760px) {
+  .platforms-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .url-extractor-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .playlists-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .connect-head-centered h1 {
+    font-size: 22px;
+  }
+}
 </style>

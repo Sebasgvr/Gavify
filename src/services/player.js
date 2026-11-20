@@ -643,19 +643,20 @@ function updateYoutubeContainerVisibility() {
 
   if (showMiniVideo.value && currentTrack.value) {
     if (isVideoExpanded.value) {
-      // Ocupa todo el cuadro de interfaz menos el panel lateral (248px en desktop / 78px en mobile) y menos el reproductor inferior (90px)
-      const sidebarWidth = window.innerWidth <= 980 ? 78 : 248
+      const isMobile = window.innerWidth <= 720
+      const sidebarWidth = window.innerWidth <= 960 ? 0 : 248
+      const playerBottom = isMobile ? 176 : 90
       host.style.cssText = `
         position: fixed;
         top: 0;
         left: ${sidebarWidth}px;
         right: 0;
-        bottom: 90px;
+        bottom: ${playerBottom}px;
         width: calc(100vw - ${sidebarWidth}px);
-        height: calc(100vh - 90px);
+        height: calc(100vh - ${playerBottom}px);
         opacity: 1;
         pointer-events: auto;
-        z-index: 930;
+        z-index: 945;
         overflow: hidden;
         border-radius: 0;
         background: #0b0d0b;
@@ -664,13 +665,15 @@ function updateYoutubeContainerVisibility() {
         transition: all 0.22s ease;
       `
     } else {
-      // Ventana chiquita flotante arriba a la derecha del reproductor
+      // Ventana chiquita flotante arriba del reproductor
+      const isMobile = window.innerWidth <= 720
       host.style.cssText = `
         position: fixed;
-        right: 24px;
-        bottom: 104px;
-        width: 340px;
-        height: 234px;
+        right: ${isMobile ? '12px' : '24px'};
+        left: ${isMobile ? '12px' : 'auto'};
+        bottom: ${isMobile ? '198px' : '112px'};
+        width: ${isMobile ? 'calc(100vw - 24px)' : '340px'};
+        height: ${isMobile ? '220px' : '234px'};
         opacity: 1;
         pointer-events: auto;
         z-index: 940;

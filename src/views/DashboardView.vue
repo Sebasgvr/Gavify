@@ -140,6 +140,23 @@
             </span>
             <span class="plays" style="display: flex; align-items: center; gap: 8px;">
               <span>{{ song.userPlays }} {{ song.userPlays === 1 ? 'vez' : 'veces' }}</span>
+              <button
+                type="button"
+                class="dash-song-btn"
+                :class="{ 'is-fav': isSongFav(song) }"
+                title="Me gusta"
+                @click.stop="toggleFavDashboard(song)"
+              >
+                <AppIcon :name="isSongFav(song) ? 'fire-filled' : 'fire'" :size="14" />
+              </button>
+              <button
+                type="button"
+                class="dash-song-btn"
+                title="Agregar a playlist"
+                @click.stop="abrirAgregarPlaylistDash(song)"
+              >
+                <AppIcon name="plus" :size="14" />
+              </button>
               <AppIcon name="play" :size="14" />
             </span>
           </div>
@@ -147,18 +164,31 @@
       </section>
     </div>
 
-    <!-- Insight Box -->
-    <div class="insight">
-      <div class="insight-mark">
-        <AppIcon name="sparkles" :size="18" />
-      </div>
-      <div>
-        <span class="tiny">CUENTA ACTIVA ({{ auth.currentUser.value?.organizacion_nombre?.toUpperCase() }})</span>
-        <p>
-          Sesión iniciada como <strong>{{ auth.currentUser.value?.nombre }}</strong> con rol
-          <strong>{{ auth.roleInfo.value?.etiqueta }}</strong> ({{ auth.currentUser.value?.plan }}).
-          Tienes <strong>{{ canciones.length }} canciones</strong> y <strong>{{ playlists.length }} playlists</strong> sincronizadas.
-        </p>
+    <!-- Modal rápido para agregar canción desde Principal a una playlist -->
+    <div v-if="songParaAgregar" class="dash-modal-backdrop" @click.self="songParaAgregar = null">
+      <div class="dash-modal-card panel">
+        <div class="dash-modal-head">
+          <div>
+            <span class="tiny accent">AGREGAR A PLAYLIST</span>
+            <h4>{{ songParaAgregar.titulo }}</h4>
+          </div>
+          <button type="button" class="dash-modal-close" @click="songParaAgregar = null">
+            <AppIcon name="close" :size="14" />
+          </button>
+        </div>
+        <div v-if="playlistsParaAgregar.length" class="dash-modal-list">
+          <button
+            v-for="pl in playlistsParaAgregar"
+            :key="pl.id"
+            type="button"
+            class="dash-modal-pl-btn"
+            @click="confirmarAgregarDash(pl)"
+          >
+            <AppIcon name="plus" :size="14" />
+            <span>{{ pl.nombre }}</span>
+          </button>
+        </div>
+        <p v-else class="muted" style="font-size: 13px;">No tienes playlists creadas aún.</p>
       </div>
     </div>
   </div>
@@ -180,6 +210,50 @@ const player = usePlayer()
 const canciones = ref([])
 const playlists = ref([])
 const repetidas = ref([])
+const favKeysSet = ref(new Set())
+const songParaAgregar = ref(null)
+
+const playlistsParaAgregar = computed(() =>
+  playlists.value.filter(p => p.tipo !== 'favoritos')
+)
+
+function getSongKey(song) {
+  return `${String(song?.titulo || '').toLowerCase().trim()}|${String(song?.artista || '').toLowerCase().trim()}`
+}
+
+function isSongFav(song) {
+  return favKeysSet.value.has(getSongKey(song))
+}
+
+async function toggleFavDashboard(song) {
+  try {
+    const res = await dbService.toggleCancionFavorita(song)
+    const next = new Set(favKeysSet.value)
+    const k = getSongKey(song)
+    if (res.isLiked) next.add(k)
+    else next.delete(k)
+    favKeysSet.value = next
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+  } catch (e) {
+    console.warn('Error toggle favorito en Principal:', e)
+  }
+}
+
+function abrirAgregarPlaylistDash(song) {
+  songParaAgregar.value = song
+}
+
+async function confirmarAgregarDash(pl) {
+  if (!songParaAgregar.value || !pl?.id) return
+  try {
+    await dbService.extractCancionFromApi(songParaAgregar.value, pl.id)
+    songParaAgregar.value = null
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    await cargarResumen()
+  } catch (e) {
+    console.warn('Error agregando a playlist:', e)
+  }
+}
 
 function etiquetaPlataforma(origen) {
   const map = {
@@ -228,6 +302,14 @@ async function cargarResumen() {
 
     canciones.value = Array.from(mapaCancionesUsuario.values())
     repetidas.value = await dbService.getCancionesRepetidas()
+
+    const favPl = misPlaylists.find(p => p.tipo === 'favoritos' || (p.nombre || '').toLowerCase() === 'tus me gusta')
+    if (favPl) {
+      const favItems = await dbService.getCancionesDePlaylist(favPl.id).catch(() => [])
+      favKeysSet.value = new Set(favItems.map(it => getSongKey(it.canciones)))
+    } else {
+      favKeysSet.value = new Set()
+    }
   } catch (e) {
     console.warn('Error cargando resumen:', e)
   }
@@ -584,5 +666,106 @@ onMounted(() => {
 .genre-legend-pct {
   font-weight: 700;
   font-size: 12px;
+}
+
+.dash-song-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #aeb6ad;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dash-song-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.dash-song-btn.is-fav {
+  background: linear-gradient(135deg, #e03a1e 0%, #ff8c00 100%);
+  border-color: #ff8c00;
+  color: #ffffff;
+}
+
+.dash-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(4px);
+  z-index: 985;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.dash-modal-card {
+  width: 100%;
+  max-width: 360px;
+  background: #151915;
+  border: 1px solid #2e362d;
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dash-modal-head h4 {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+
+.dash-modal-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d6dcd5;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.dash-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.dash-modal-pl-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
+  color: #e7ece6;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.dash-modal-pl-btn:hover {
+  background: rgba(184, 223, 109, 0.14);
+  border-color: var(--lime);
+  color: var(--lime);
 }
 </style>

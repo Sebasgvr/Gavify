@@ -86,8 +86,11 @@
           </div>
         </div>
 
-        <!-- Sugerencias rápidas -->
-        <div class="quick-search-chips">
+        <!-- Sugerencias rápidas (en móvil tipo Google y desaparecen al buscar) -->
+        <div
+          class="quick-search-chips"
+          :class="{ 'hide-on-mobile-search': consultaApi.trim().length > 0 }"
+        >
           <span class="tiny">POPULARES:</span>
           <button
             v-for="sug in sugerenciasBusqueda"
@@ -1483,6 +1486,40 @@ onMounted(() => {
   .form-row,
   .form-row.three-cols {
     grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 720px) {
+  .quick-search-chips.hide-on-mobile-search {
+    display: none;
+  }
+
+  .quick-search-chips {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    background: #141814;
+    border: 1px solid #2b322a;
+    border-radius: 14px;
+    padding: 8px;
+    max-height: 220px;
+    overflow-y: auto;
+  }
+
+  .quick-search-chips .tiny {
+    padding: 4px 8px 6px;
+  }
+
+  .quick-search-chips .chip-btn {
+    text-align: left;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    padding: 8px 10px;
+    width: 100%;
+  }
+
+  .quick-search-chips .chip-btn:hover {
+    background: rgba(255, 255, 255, 0.06);
   }
 }
 </style>

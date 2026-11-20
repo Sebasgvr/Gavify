@@ -587,12 +587,11 @@
 
               <td class="col-actions">
                 <button
-                  v-if="auth.canManagePlaylists.value"
                   class="row-remove-btn"
-                  :title="item.repetida_en_misma_lista ? 'Sacar esta copia repetida de la playlist' : 'Quitar de la playlist'"
-                  @click.stop="quitarCancionDePlaylist(item.id)"
+                  title="Opciones de canción"
+                  @click.stop="abrirMenuCancionPlaylist(item)"
                 >
-                  <AppIcon name="trash" :size="15" />
+                  <AppIcon name="dots-vertical" :size="16" />
                 </button>
               </td>
             </tr>
@@ -907,6 +906,60 @@
     </div>
 
     <!-- =================================================================== -->
+    <!-- MODAL: OPCIONES DE CANCIÓN (AGREGAR A OTRA PLAYLIST / ELIMINAR)     -->
+    <!-- =================================================================== -->
+    <div v-if="itemMenuCancion" class="modal-backdrop" @click.self="itemMenuCancion = null">
+      <div class="modal-card panel" style="max-width: 380px; padding: 20px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px;">
+          <div style="min-width:0;flex:1;">
+            <span class="tiny accent">OPCIONES DE CANCIÓN</span>
+            <h3 style="margin:4px 0 2px;font-size:16px;line-height:1.3;">{{ itemMenuCancion.canciones?.titulo }}</h3>
+            <small class="muted">{{ itemMenuCancion.canciones?.artista }}</small>
+          </div>
+          <button
+            type="button"
+            style="width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,0.14);background:rgba(255,255,255,0.06);color:#e7ece6;display:grid;place-items:center;flex-shrink:0;cursor:pointer;"
+            title="Cerrar"
+            @click="itemMenuCancion = null"
+          >
+            <AppIcon name="close" :size="14" />
+          </button>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <span class="tiny" style="display:block;margin-bottom:8px;">AGREGAR A OTRA PLAYLIST</span>
+            <div v-if="otrasPlaylistsParaAgregar.length" style="display:flex;flex-direction:column;gap:6px;max-height:185px;overflow-y:auto;">
+              <button
+                v-for="pl in otrasPlaylistsParaAgregar"
+                :key="pl.id"
+                type="button"
+                class="outline"
+                style="width:100%;justify-content:flex-start;gap:8px;padding:10px 14px;font-size:13px;"
+                @click="agregarDesdeMenuAPlaylist(itemMenuCancion.canciones, pl)"
+              >
+                <AppIcon name="plus" :size="14" />
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ pl.nombre }}</span>
+              </button>
+            </div>
+            <p v-else class="muted" style="font-size:12px;margin:0;">No tienes otras playlists disponibles.</p>
+          </div>
+
+          <button
+            v-if="auth.canManagePlaylists.value"
+            type="button"
+            class="danger-btn"
+            style="width:100%;justify-content:center;gap:8px;padding:10px 14px;"
+            @click="eliminarDesdeMenu(itemMenuCancion.id)"
+          >
+            <AppIcon name="trash" :size="15" />
+            <span>Eliminar de esta playlist</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================== -->
     <!-- MODAL: CONFIRMACIÓN ANTES DE ELIMINAR PLAYLIST                      -->
     <!-- =================================================================== -->
     <div v-if="playlistPorEliminar" class="modal-backdrop" @click.self="playlistPorEliminar = null">
@@ -947,6 +1000,51 @@ const auth = useAuth()
 const route = useRoute()
 const router = useRouter()
 const player = usePlayer()
+
+const itemMenuCancion = ref(null)
+
+const otrasPlaylistsParaAgregar = computed(() =>
+  playlists.value.filter(
+    p => p.tipo !== 'favoritos' && p.id !== playlistActual.value?.id
+  )
+)
+
+function abrirMenuCancionPlaylist(item) {
+  itemMenuCancion.value = item
+}
+
+async function toggleMeGustaDesdeMenu(cancion) {
+  if (!cancion) return
+  try {
+    const res = await dbService.toggleCancionFavorita(cancion)
+    mensaje.value = res.isLiked
+      ? `"${cancion.titulo}" agregada a Tus me gusta.`
+      : `"${cancion.titulo}" quitada de Tus me gusta.`
+    itemMenuCancion.value = null
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    await cargarDatos()
+  } catch (err) {
+    errorMensaje.value = err.message
+  }
+}
+
+async function agregarDesdeMenuAPlaylist(cancion, pl) {
+  if (!cancion || !pl?.id) return
+  try {
+    await dbService.extractCancionFromApi(cancion, pl.id)
+    mensaje.value = `"${cancion.titulo}" agregada a "${pl.nombre}".`
+    itemMenuCancion.value = null
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    await cargarDatos()
+  } catch (err) {
+    errorMensaje.value = err.message
+  }
+}
+
+async function eliminarDesdeMenu(relId) {
+  itemMenuCancion.value = null
+  await quitarCancionDePlaylist(relId)
+}
 
 const playlists = ref([])
 const todasLasCanciones = ref([])
@@ -1843,7 +1941,13 @@ onMounted(() => {
 
 @media (max-width: 440px) {
   .square-playlists-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .square-playlist-card {
+    padding: 8px;
+    gap: 6px;
   }
 }
 
@@ -3112,6 +3216,14 @@ onMounted(() => {
 
   .col-album,
   .col-date {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .col-num,
+  .col-plays,
+  .col-duration {
     display: none;
   }
 }

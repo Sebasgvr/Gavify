@@ -949,32 +949,6 @@ em {
 }
 
 @media(max-width:850px) {
-    .sidebar {
-        width: 75px;
-        padding: 22px 10px
-    }
-
-    .sidebar .brand span,
-    .nav-label,
-    .nav {
-        font-size: 0
-    }
-
-    .sidebar .brand {
-        margin: 0 auto 55px
-    }
-
-    .nav {
-        text-align: center;
-        padding: 13px 0;
-        justify-content: center;
-    }
-
-    .nav-icon {
-        font-size: 18px;
-        width: auto
-    }
-
     .profile>div:last-child,
     .logout {
         display: none
@@ -1029,6 +1003,40 @@ em {
         padding: 22px 6vw
     }
 
+    .vinyl,
+    .vinyl-light-wave {
+        width: 230px;
+        height: 230px;
+    }
+
+    .hero-art {
+        min-height: 310px;
+    }
+
+    .card.one,
+    .card.two {
+        padding: 10px 12px;
+    }
+
+    .card strong {
+        font-size: 15px;
+    }
+
+    .spotify-track-table .col-date,
+    .spotify-track-table .col-plays {
+        display: none;
+    }
+
+    .playlist-hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .hero-cover-box {
+        width: 150px;
+        height: 150px;
+    }
+
     .landing-note,
     .sync-text,
     .sync {
@@ -1044,16 +1052,8 @@ em {
     }
 
     .topbar {
-        padding: 20px 18px;
-        height: 82px
-    }
-
-    .topbar>div:first-child {
-        display: none
-    }
-
-    .mobile-logo {
-        display: block
+        padding: 14px 14px;
+        height: auto;
     }
 
     .top-actions {

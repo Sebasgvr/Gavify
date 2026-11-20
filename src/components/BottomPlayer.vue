@@ -256,14 +256,16 @@
           />
 
           <div class="player-track-meta">
-            <div class="player-track-title-wrap">
-              <MarqueeText :text="player.currentTrack.value.titulo" class="player-track-title" />
-            </div>
-            <div class="player-track-artist-wrap">
-              <MarqueeText :text="player.currentTrack.value.artista" class="player-track-artist" />
+            <div class="player-track-title-row">
+              <div class="player-track-title-wrap">
+                <MarqueeText :text="player.currentTrack.value.titulo" class="player-track-title" />
+              </div>
               <span class="player-origin-tag">
                 {{ etiquetaPlataforma(player.currentTrack.value.plataforma_origen) }}
               </span>
+            </div>
+            <div class="player-track-artist-wrap">
+              <MarqueeText :text="player.currentTrack.value.artista" class="player-track-artist" />
             </div>
           </div>
 
@@ -277,13 +279,57 @@
               <AppIcon :name="player.isCurrentSaved.value ? 'fire-filled' : 'fire'" :size="18" />
             </button>
 
-            <button
-              class="player-icon-btn danger-hover"
-              title="Quitar canción del reproductor"
-              @click="player.removeCurrentTrack()"
-            >
-              <AppIcon name="trash" :size="17" />
-            </button>
+            <div class="player-more-wrap">
+              <button
+                class="player-icon-btn"
+                title="Agregar o quitar de playlist"
+                @click.stop="toggleMenuOpciones"
+              >
+                <AppIcon name="plus" :size="17" />
+              </button>
+
+              <div v-if="showTrackMenu" class="player-more-menu" @click.stop>
+                <div class="player-more-header">
+                  <span class="tiny accent">OPCIONES DE CANCIÓN</span>
+                  <button type="button" class="player-more-close" @click="showTrackMenu = false">
+                    <AppIcon name="close" :size="12" />
+                  </button>
+                </div>
+
+                <div class="player-more-section">
+                  <span class="player-more-sub">Agregar a playlist</span>
+                  <div v-if="playlistsUsuarioMenu.length" class="player-more-playlists">
+                    <button
+                      v-for="pl in playlistsUsuarioMenu"
+                      :key="pl.id"
+                      type="button"
+                      class="player-more-item"
+                      @click="agregarCancionActualAPlaylist(pl)"
+                    >
+                      <AppIcon name="plus" :size="13" />
+                      <span>{{ pl.nombre }}</span>
+                    </button>
+                  </div>
+                  <small v-else class="player-more-empty">No tienes playlists creadas aún.</small>
+                </div>
+
+                <div v-if="playlistsConCancionActual.length" class="player-more-section">
+                  <span class="player-more-sub">Quitar de playlist</span>
+                  <div class="player-more-playlists">
+                    <button
+                      v-for="rel in playlistsConCancionActual"
+                      :key="rel.relId"
+                      type="button"
+                      class="player-more-item danger"
+                      @click="quitarCancionActualDePlaylist(rel)"
+                    >
+                      <AppIcon name="trash" :size="13" />
+                      <span>Quitar de "{{ rel.playlistNombre }}"</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -429,6 +475,72 @@ import { useAuth } from '@/services/auth'
 
 const player = usePlayer()
 const auth = useAuth()
+
+const showTrackMenu = ref(false)
+const playlistsUsuarioMenu = ref([])
+const playlistsConCancionActual = ref([])
+
+async function toggleMenuOpciones() {
+  showTrackMenu.value = !showTrackMenu.value
+  if (!showTrackMenu.value) return
+  try {
+    const todas = await dbService.getPlaylists()
+    playlistsUsuarioMenu.value = todas.filter(p => p.tipo !== 'favoritos')
+    const track = player.currentTrack.value
+    const matches = []
+    if (track) {
+      const tTitle = String(track.titulo || '').toLowerCase().trim()
+      const tArtist = String(track.artista || '').toLowerCase().trim()
+      for (const pl of playlistsUsuarioMenu.value) {
+        const items = await dbService.getCancionesDePlaylist(pl.id).catch(() => [])
+        const found = items.find(
+          it =>
+            it.canciones?.id === track.id ||
+            (String(it.canciones?.titulo || '').toLowerCase().trim() === tTitle &&
+              String(it.canciones?.artista || '').toLowerCase().trim() === tArtist)
+        )
+        if (found) {
+          matches.push({ relId: found.id, playlistId: pl.id, playlistNombre: pl.nombre })
+        }
+      }
+    }
+    playlistsConCancionActual.value = matches
+  } catch {
+    playlistsUsuarioMenu.value = []
+    playlistsConCancionActual.value = []
+  }
+}
+
+async function agregarCancionActualAPlaylist(pl) {
+  const track = player.currentTrack.value
+  if (!track || !pl?.id) return
+  try {
+    await dbService.extractCancionFromApi(track, pl.id)
+    showTrackMenu.value = false
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    player.saveFeedback.value = `Agregada a "${pl.nombre}"`
+    setTimeout(() => {
+      player.saveFeedback.value = ''
+    }, 2400)
+  } catch (e) {
+    console.warn('Error agregando a playlist:', e)
+  }
+}
+
+async function quitarCancionActualDePlaylist(rel) {
+  if (!rel?.relId) return
+  try {
+    await dbService.removeCancionFromPlaylist(rel.relId)
+    showTrackMenu.value = false
+    window.dispatchEvent(new CustomEvent('gavify:library-updated'))
+    player.saveFeedback.value = `Quitada de "${rel.playlistNombre}"`
+    setTimeout(() => {
+      player.saveFeedback.value = ''
+    }, 2400)
+  } catch (e) {
+    console.warn('Error quitando de playlist:', e)
+  }
+}
 
 // Paginación de a 20 temas para la fila de reproducción
 const limiteFilaVisible = ref(20)
@@ -1251,10 +1363,121 @@ function etiquetaPlataforma(plat) {
   max-width: 220px;
 }
 
-.player-track-title-wrap,
+.player-track-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.player-track-title-wrap {
+  min-width: 0;
+  flex: 1;
+}
+
 .player-track-artist-wrap {
   min-width: 0;
   max-width: 100%;
+}
+
+.player-more-wrap {
+  position: relative;
+}
+
+.player-more-menu {
+  position: absolute;
+  bottom: 44px;
+  right: 0;
+  width: 245px;
+  max-height: 300px;
+  overflow-y: auto;
+  background: #141814;
+  border: 1px solid #2e362d;
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.85);
+  z-index: 980;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.player-more-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.player-more-close {
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #cfd5ce;
+}
+
+.player-more-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.player-more-sub {
+  font-size: 10px;
+  font-weight: 700;
+  color: #8c978b;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.player-more-playlists {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 110px;
+  overflow-y: auto;
+}
+
+.player-more-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: #e7ece6;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.player-more-item span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-more-item:hover {
+  background: rgba(184, 223, 109, 0.14);
+  color: var(--lime);
+}
+
+.player-more-item.danger:hover {
+  background: rgba(232, 121, 93, 0.16);
+  color: var(--red);
+}
+
+.player-more-empty {
+  font-size: 11px;
+  color: #7d877c;
 }
 
 .player-track-title {
@@ -1524,13 +1747,74 @@ function etiquetaPlataforma(plat) {
 
 @media (max-width: 900px) {
   .bottom-player-footer {
-    grid-template-columns: 1fr 1.2fr;
+    grid-template-columns: 1fr;
     height: auto;
-    padding: 12px 18px;
+    padding: 10px 14px;
+    gap: 10px;
   }
 
   .player-right {
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 720px) {
+  .bottom-player-footer {
+    bottom: 0;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .player-left {
+    gap: 10px;
+    justify-content: space-between;
+  }
+
+  .player-track-meta {
+    flex: 1;
+    max-width: calc(100vw - 175px);
+  }
+
+  .player-quick-actions {
+    margin-left: auto;
+  }
+
+  .volume-control-group {
     display: none;
+  }
+
+  .close-player-pill {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .queue-window,
+  .queue-window.queue-expanded {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 192px;
+    width: 100%;
+    max-width: 100%;
+    height: 54vh;
+    max-height: calc(100vh - 210px);
+    border-radius: 18px 18px 0 0;
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .lyrics-window,
+  .lyrics-window.lyrics-expanded {
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: 198px;
+    width: auto;
+    height: 52vh;
+    max-height: calc(100vh - 214px);
+    border-radius: 16px;
   }
 }
 </style>
