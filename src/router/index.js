@@ -10,6 +10,7 @@ import MusicaView from '@/views/MusicaView.vue'
 import PlaylistsView from '@/views/PlaylistsView.vue'
 import RolesTestView from '@/views/RolesTestView.vue'
 import PrivacyView from '@/views/PrivacyView.vue'
+import QuizView from '@/views/QuizView.vue'
 import { useAuth } from '@/services/auth'
 import { registrarEventoSeguridad } from '@/services/db'
 
@@ -56,6 +57,12 @@ const routes = [
         name: 'connect',
         component: ConnectView,
         meta: { title: 'Apps Conectadas', requiresAuth: true }
+      },
+      {
+        path: '/quiz',
+        name: 'quiz',
+        component: QuizView,
+        meta: { title: 'Quiz Musical', requiresAuth: true }
       },
       {
         path: '/musica',

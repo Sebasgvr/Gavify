@@ -53,6 +53,15 @@
         </RouterLink>
 
         <RouterLink
+          to="/quiz"
+          class="nav"
+          :class="{ active: route.path === '/quiz' }"
+        >
+          <span class="nav-icon"><AppIcon name="trophy" :size="18" /></span>
+          <span class="nav-text">Quiz Musical</span>
+        </RouterLink>
+
+        <RouterLink
           v-if="auth.canManageUsers.value"
           to="/seguridad"
           class="nav"
